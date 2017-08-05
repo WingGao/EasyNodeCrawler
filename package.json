@@ -16,10 +16,12 @@
     "log4js": "^2.3.3",
     "morgan": "~1.8.1",
     "node-sass-middleware": "0.9.8",
+    "numeral": "^2.0.6",
     "promise-queue": "^2.2.3",
     "request": "^2.81.0",
     "sequelize": "^4.4.2",
     "serve-favicon": "~2.4.2",
-    "sqlite3": "^3.1.8"
+    "sqlite3": "^3.1.8",
+    "yargs": "^8.0.2"
   }
 }
