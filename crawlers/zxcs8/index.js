@@ -156,7 +156,6 @@ function getMaxPid() {
     })
 }
 
-
 function main() {
     let doNothing = () => null
 
@@ -234,6 +233,7 @@ function main() {
             }
         })
     } else {
+        //TODO 获取最小pid
         getMaxPid().then(mpid => {
             queryList = _.range(beginPid, mpid)
             for (let i = 0; i < maxConcurrent; i++) {

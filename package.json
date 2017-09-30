@@ -11,6 +11,7 @@
     "cookie-parser": "~1.4.3",
     "debug": "~2.6.3",
     "express": "~4.15.2",
+    "iconv": "^2.3.0",
     "jade": "~1.11.0",
     "lodash": "^4.17.4",
     "log4js": "^2.3.3",
@@ -22,6 +23,8 @@
     "sequelize": "^4.4.2",
     "serve-favicon": "~2.4.2",
     "sqlite3": "^3.1.8",
+    "tough-cookie": "latest",
+    "tough-cookie-filestore": "0.0.1",
     "yargs": "^8.0.2"
   }
 }
