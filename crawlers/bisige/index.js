@@ -22,7 +22,7 @@ let UserObj = {
     exp: 0,
     gx: 0,
     jbd: 0,
-    score:0,
+    score: 0,
 }
 
 function buildRequest() {
@@ -71,7 +71,7 @@ function getMyScore() {
                         { name: '积分', key: 'score' },
                     ], (item) => {
                         let em = $(v).find('em')
-                        logger.info(em.text())
+                        // logger.info(em.text())
                         if (em.text().indexOf(item.name) >= 0) {
                             UserObj[item.key] = parseInt(em[0].next.data)
                         }
@@ -83,17 +83,58 @@ function getMyScore() {
 }
 
 function checkLogin() {
-    getMyScore()
-    logger.info(session)
+    return new Promise((resolve, reject) => {
+        getMyScore().then(() => {
+            logger.info("用户信息", UserObj)
+            resolve()
+        }).catch(() => {
+            reject()
+        })
+    })
+}
+
+function loadList(url) {
+    return new Promise((resolve, reject) => {
+        request.get(url, (error, response, body) => {
+            if (error != null) {
+                reject()
+            }
+            body = iconv.convert(body).toString()
+            const $ = cheerio.load(body)
+            let posts = []
+            $('#separatorline').nextAll('tbody[id^=normalthread]').each((i, tbody) => {
+                tbody = $(tbody)
+                let th = tbody.find('th.new')
+                let lastPage = 1
+                let lastPageA = th.find('span.tps a')
+                if (lastPageA.length > 0) {
+                    lastPage = parseInt(lastPageA.eq(-1).text())
+                }
+                let post = {
+                    pid: parseInt(tbody.attr('id').split('_')[1]),
+                    category_name: th.find('em a').text().trim(),
+                    title: th.find('a.s.xst').text().trim(),
+                    page: lastPage,
+                }
+                posts.push(post)
+                logger.info(post)
+                // debugger
+            })
+            resolve(posts)
+        })
+    })
 }
 
 function main() {
     buildRequest()
 
-    if (!checkLogin()) {
-        console.log('session error')
-        return
-    }
+    checkLogin().then(() => {
+        loadList('http://www.bisige.net/forum-18-1.html').then(posts => {
+            //TODO
+        })
+    }).catch(() => {
+        logger.error('cookie过期')
+    })
 }
 
 main()

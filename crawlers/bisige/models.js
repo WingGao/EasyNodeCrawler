@@ -6,7 +6,7 @@ const TABLE_PRE = 'bisige_'
 const Post = db.define(TABLE_PRE + 'post', {
     pid: { type: Sequelize.DataTypes.INTEGER, unique: true },
     // create_time: Sequelize.DataTypes.TIME,
-    post_title: Sequelize.DataTypes.STRING,
+    title: Sequelize.DataTypes.STRING,
     category_name: Sequelize.DataTypes.STRING,
     download_url: Sequelize.DataTypes.STRING,
     is_downloaded: Sequelize.DataTypes.BOOLEAN,
