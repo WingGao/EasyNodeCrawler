@@ -9,6 +9,7 @@ const Post = db.define(TABLE_PRE + 'post', {
     title: Sequelize.DataTypes.STRING,
     category_name: Sequelize.DataTypes.STRING,
     download_url: Sequelize.DataTypes.STRING,
+    purchase_url: Sequelize.DataTypes.STRING,
     is_downloaded: Sequelize.DataTypes.BOOLEAN,
     my_reply_page: Sequelize.DataTypes.INTEGER,//我的回复页数
     can_replay: Sequelize.DataTypes.BOOLEAN,//我有没有权限回复

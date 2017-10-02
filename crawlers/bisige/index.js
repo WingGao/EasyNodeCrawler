@@ -156,42 +156,54 @@ function getFormAnswer(pid, idhash) {
     })
 }
 
-function getPostFile(body$) {
+function setPostFile(body$, dbPost) {
     const $ = body$
-    let msgs = $('td[id^=postmessage_]')
-    let a = msgs.eq(0).find('.attnm a')
-    if (a.length > 1) {
-        return a.attr('href').trim()
+    let msgs = $('div[id^=post_]')
+    let mainMsg = msgs.eq(0)
+    let a = mainMsg.find('ignore_js_op a')
+    if (a.length > 0) {
+        a = a.eq(0)
+        let href = a.attr('href').trim()
+        if (a.attr('onclick').indexOf('attachpay') > 0) {
+            //付费附件
+            dbPost.purchase_url = href
+        } else {
+            dbPost.download_url = href
+        }
     }
-    return ''
 }
 
 function replyPost(dbPost) {
     let postUrl = `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
     return new Promise((resolve, reject) => {
+        logger.info('try reply post', postUrl)
         request.get(postUrl, async (error, response, body) => {
             if (error != null) reject()
             body = iconv.convert(body).toString()
             const $ = cheerio.load(body)
-            if ($('#messagetext.alert_error').length > 0) {
+            let msgErr = $('#messagetext.alert_error')
+            if (msgErr.length > 0) {
                 //没有权限
+                logger.warn(`pid=${dbPost.pid}`, msgErr.text())
                 dbPost.can_replay = false
-                resolve()
+                resolve(false)
                 return
             }
-            if(_.size(dbPost.download_url) == 0){
-                dbPost.download_url = getPostFile($)
+            if (_.size(dbPost.download_url) == 0) {
+                dbPost.download_url = setPostFile($, dbPost)
             }
             let msgs = $('td[id^=postmessage_]')
             let copyMsgNum = _.random(1, msgs.length - 1)
             let copyMsg = msgs.eq(copyMsgNum).text()
+            logger.info(`pid=${dbPost.pid}`, '回复内容：', copyMsgNum, copyMsg)
             let replyUrl = `http://www.bisige.net/forum.php?mod=post&action=reply&fid=18&tid=${dbPost.pid}&extra=page%3D2&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1`
             let replyForm = $('#f_pst form')
             let pthm = replyForm.find('.pt.hm')
             if (pthm.length >= 1 && pthm.text().indexOf('无权') > 0) {
                 //锁定帖，无权限发帖
+                logger.warn(`pid=${dbPost.pid}`, pthm.text())
                 dbPost.can_replay = false
-                resolve()
+                resolve(false)
                 return
             }
             let secqaa = replyForm.find('span[id^=secqaa_]')
@@ -215,8 +227,10 @@ function replyPost(dbPost) {
                 if (body2.indexOf('回复发布成功') > 0) {
                     let preg = /\d+/g
                     dbPost.my_reply_page = preg.exec($('.pgs.mtm.mbm.cl label span').attr('title'))[0]
-                    resolve()
+                    logger.info(`pid=${dbPost.pid}`, '回复成功')
+                    resolve(true)
                 } else {
+                    logger.warn(`pid=${dbPost.pid}`, body2)
                     reject(body2)
                 }
                 // debugger
@@ -246,8 +260,15 @@ function getWorkPage() {
     })
 }
 
+function asyncWaitTime(msec) {
+    return new Promise((resolve, reject) => {
+        setTimeout(() => {
+            resolve()
+        }, msec)
+    })
+}
+
 async function main() {
-    buildRequest()
     try {
         await checkLogin()
         let workPage = await getWorkPage()
@@ -258,7 +279,9 @@ async function main() {
             logger.info('load page', i)
             let listUrl = `http://www.bisige.net/forum.php?mod=forumdisplay&fid=18&orderby=dateline&page=${i}`
             let posts = await loadList(listUrl)
-            _.forEach(posts.slice(0, 1), async p => {
+            for (let j = 0; j < posts.length; j++) {
+                let p = posts[j]
+                logger.info('检查', `pid=${p.pid}`, p.title)
                 let post = await Post.findByPid(p.pid)
                 if (post == null) {
                     post = Post.build(_.merge({
@@ -272,19 +295,43 @@ async function main() {
                     let isReplied = false
                     try {
                         isReplied = await replyPost(post)
-                        debugger
+                        await post.save()
+                        if (isReplied) {
+                            replyedPostsNum += 1
+                            //两次回复间隔2分钟
+                            logger.info('等待2分钟')
+                            await asyncWaitTime(2 * 60 * 1000)
+                        }
                     } catch (e) {
                         post.can_replay = false
+                        await post.save()
                     }
-                    await post.save()
+                    //最大回复数
+                    if (replyedPostsNum >= MAX_REPLEY_NUM) {
+                        return
+                    }
                 }
-            })
+            }
             workPage.value = i
-            // await workPage.save()
-            return
+            await workPage.save()
+            // return
         }
     } catch (e) {
         logger.error('cookie过期')
+    }
+}
+
+async function loopMain() {
+    while (true) {
+        //7点之前停止回复
+        if (new Date().getHours() < 7) {
+            logger.info('暂停工作40分钟')
+            await asyncWaitTime(40 * 60 * 60 * 1000)
+        } else {
+            await main()
+            logger.info('列表暂停5分钟')
+            await asyncWaitTime(5 * 60 * 1000)
+        }
     }
 }
 
@@ -293,18 +340,35 @@ buildRequest()
 // main().then(res => {
 //
 // })
+loopMain().then(res => {
+
+})
 
 //test
 
 async function _test_replyPost() {
     let post = {
         // pid: 385087,//测试无权限帖子
-        pid: 407, //测试锁定帖
+        // pid: 407, //测试锁定帖
+        pid: 532707,//收费附件
     }
     let res = await replyPost(post)
     logger.info(res)
 }
 
-_test_replyPost().then(res => {
+// _test_replyPost().then(res => {
+//
+// })
 
-})
+function _test_getFile() {
+    request.get('http://www.bisige.net/thread-532707-1-1.html', async (error, response, body) => {
+        if (error != null) reject()
+        let p = {}
+        body = iconv.convert(body).toString()
+        const $ = cheerio.load(body)
+        let furl = setPostFile($, p)
+        debugger
+    })
+}
+
+// _test_getFile()
