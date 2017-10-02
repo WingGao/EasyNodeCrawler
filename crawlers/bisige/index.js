@@ -1,3 +1,4 @@
+const { KV } = require('../../config/db')
 const { Post } = require('./models')
 const _request = require('request')
 const tough = require('tough-cookie');
@@ -5,7 +6,6 @@ const Iconv = require('iconv').Iconv;
 const iconv = new Iconv('GBK', 'UTF-8//TRANSLIT//IGNORE');
 const _ = require('lodash')
 const cheerio = require('cheerio')
-const Queue = require('promise-queue')
 const numeral = require('numeral')
 const log4js = require('log4js');
 const logger = log4js.getLogger();
@@ -13,10 +13,15 @@ logger.level = 'debug'
 const argv = require('yargs').argv
 const fs = require('fs')
 const path = require('path')
+const qs = require('qs')
+const { Url } = require("url");
+const { Queue } = require('../queue')
 const BHOST = 'http://www.bisige.net'
+const KEY_WORK_PAGE = 'bisige_work_page'
 const session = argv.s
 let request;
 let UserObj = {
+    username: '',
     uid: '',
     coin: 0,
     exp: 0,
@@ -62,6 +67,7 @@ function getMyScore() {
                 }
                 UserObj.uid = uid[1]
                 const $ = cheerio.load(body)
+                UserObj.username = $('#umnav').text().trim()
                 $('ul.creditl.mtm.bbda.cl li').each((i, v) => {
                     _.forEach([
                         { name: '金币', key: 'coin' },
@@ -110,31 +116,195 @@ function loadList(url) {
                 if (lastPageA.length > 0) {
                     lastPage = parseInt(lastPageA.eq(-1).text())
                 }
+                let lastReplyUsername = tbody.find('td.by cite a').eq(-1).text().trim()
                 let post = {
                     pid: parseInt(tbody.attr('id').split('_')[1]),
                     category_name: th.find('em a').text().trim(),
                     title: th.find('a.s.xst').text().trim(),
                     page: lastPage,
+                    last_is_me: lastReplyUsername == UserObj.username,
                 }
                 posts.push(post)
-                logger.info(post)
                 // debugger
             })
+            logger.info('fetch posts ', posts.length)
             resolve(posts)
         })
     })
 }
 
-function main() {
-    buildRequest()
+function taskPostPick(rawPost) {
 
-    checkLogin().then(() => {
-        loadList('http://www.bisige.net/forum-18-1.html').then(posts => {
-            //TODO
+}
+
+function getFormAnswer(pid, idhash) {
+    let gurl = `http://www.bisige.net/misc.php?mod=secqaa&action=update&idhash=${idhash}&${_.random(0, 1, true)}`
+    return new Promise((resolve, reject) => {
+        request.get({
+            url: gurl, headers: {
+                'Referer': `http://www.bisige.net/thread-${pid}-1-2.html`
+            }
+        }, (error, response, body) => {
+            if (error != null) reject()
+            body = iconv.convert(body).toString()
+            let qreg = /sectplcode\[2\] \+ '(.+) = \?'/g
+            let qev = qreg.exec(body)[1]
+            let answer = eval(qev)
+            // debugger
+            resolve(answer)
         })
-    }).catch(() => {
-        logger.error('cookie过期')
     })
 }
 
-main()
+function getPostFile(body$) {
+    const $ = body$
+    let msgs = $('td[id^=postmessage_]')
+    let a = msgs.eq(0).find('.attnm a')
+    if (a.length > 1) {
+        return a.attr('href').trim()
+    }
+    return ''
+}
+
+function replyPost(dbPost) {
+    let postUrl = `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
+    return new Promise((resolve, reject) => {
+        request.get(postUrl, async (error, response, body) => {
+            if (error != null) reject()
+            body = iconv.convert(body).toString()
+            const $ = cheerio.load(body)
+            if ($('#messagetext.alert_error').length > 0) {
+                //没有权限
+                dbPost.can_replay = false
+                resolve()
+                return
+            }
+            if(_.size(dbPost.download_url) == 0){
+                dbPost.download_url = getPostFile($)
+            }
+            let msgs = $('td[id^=postmessage_]')
+            let copyMsgNum = _.random(1, msgs.length - 1)
+            let copyMsg = msgs.eq(copyMsgNum).text()
+            let replyUrl = `http://www.bisige.net/forum.php?mod=post&action=reply&fid=18&tid=${dbPost.pid}&extra=page%3D2&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1`
+            let replyForm = $('#f_pst form')
+            let pthm = replyForm.find('.pt.hm')
+            if (pthm.length >= 1 && pthm.text().indexOf('无权') > 0) {
+                //锁定帖，无权限发帖
+                dbPost.can_replay = false
+                resolve()
+                return
+            }
+            let secqaa = replyForm.find('span[id^=secqaa_]')
+            let secqaahash = secqaa.attr('id').split('_')[1]
+            let postData = {
+                message: copyMsg,
+                formhash: replyForm.find('input[name=formhash]').attr('value'),
+                secqaahash: secqaahash,
+                secanswer: await getFormAnswer(dbPost.pid, secqaahash),
+                posttime: Math.floor(new Date().getTime() / 1000),
+            }
+            request.post({
+                url: replyUrl,
+                form: postData,
+                headers: {
+                    'Referer': `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
+                }
+            }, (error2, response2, body2) => {
+                if (error2 != null) reject()
+                body2 = iconv.convert(body2).toString()
+                if (body2.indexOf('回复发布成功') > 0) {
+                    let preg = /\d+/g
+                    dbPost.my_reply_page = preg.exec($('.pgs.mtm.mbm.cl label span').attr('title'))[0]
+                    resolve()
+                } else {
+                    reject(body2)
+                }
+                // debugger
+            })
+            // resolve(true)
+        })
+    })
+}
+
+function checkPostCanReply(rawPost, dbPost) {
+    if (!dbPost.can_replay || //判断权限
+        dbPost.my_reply_page > 0 ||//先只回复没有回复过的
+        rawPost.page < 2 //只回复满1页的帖子
+    ) return false
+    // if (rawPost.page <= dbPost.my_reply_page) return false
+    return true
+}
+
+function getWorkPage() {
+    return KV.findByKey(KEY_WORK_PAGE).then(item => {
+        if (item == null) {
+            return KV.build({ key: KEY_WORK_PAGE, value: 0 })
+        } else {
+            item.value = parseInt(item.value)
+            return item
+        }
+    })
+}
+
+async function main() {
+    buildRequest()
+    try {
+        await checkLogin()
+        let workPage = await getWorkPage()
+        let needReplyPosts = []
+        let replyedPostsNum = 0
+        const MAX_REPLEY_NUM = 5
+        for (let i = workPage.value + 1; i < 366; i++) {
+            logger.info('load page', i)
+            let listUrl = `http://www.bisige.net/forum.php?mod=forumdisplay&fid=18&orderby=dateline&page=${i}`
+            let posts = await loadList(listUrl)
+            _.forEach(posts.slice(0, 1), async p => {
+                let post = await Post.findByPid(p.pid)
+                if (post == null) {
+                    post = Post.build(_.merge({
+                        is_downloaded: false,
+                        my_reply_page: 0,
+                        can_replay: true,
+                    }, p))
+                    await post.save()
+                }
+                if (checkPostCanReply(p, post)) {
+                    let isReplied = false
+                    try {
+                        isReplied = await replyPost(post)
+                        debugger
+                    } catch (e) {
+                        post.can_replay = false
+                    }
+                    await post.save()
+                }
+            })
+            workPage.value = i
+            // await workPage.save()
+            return
+        }
+    } catch (e) {
+        logger.error('cookie过期')
+    }
+}
+
+buildRequest()
+//
+// main().then(res => {
+//
+// })
+
+//test
+
+async function _test_replyPost() {
+    let post = {
+        // pid: 385087,//测试无权限帖子
+        pid: 407, //测试锁定帖
+    }
+    let res = await replyPost(post)
+    logger.info(res)
+}
+
+_test_replyPost().then(res => {
+
+})

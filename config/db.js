@@ -14,6 +14,15 @@ const sequelize = new Sequelize('database', 'username', 'password', {
 
     },
 });
+const KV = sequelize.define('kv', {
+    key: { type: Sequelize.DataTypes.STRING, unique: true },
+    value: Sequelize.DataTypes.STRING,
+})
 
+KV.findByKey = function (key) {
+    return this.findOne({ where: { key: key } })
+}
 
-module.exports.db = sequelize
+KV.sync()
+
+module.exports = { db: sequelize, KV }
