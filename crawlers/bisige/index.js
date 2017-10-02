@@ -110,7 +110,7 @@ function loadList(url) {
             let posts = []
             $('#separatorline').nextAll('tbody[id^=normalthread]').each((i, tbody) => {
                 tbody = $(tbody)
-                let th = tbody.find('th.new')
+                let th = tbody.find('th')
                 let lastPage = 1
                 let lastPageA = th.find('span.tps a')
                 if (lastPageA.length > 0) {
@@ -345,6 +345,14 @@ loopMain().then(res => {
 })
 
 //test
+function _test_loadlist() {
+    let listUrl = `http://www.bisige.net/forum.php?mod=forumdisplay&fid=18&orderby=dateline&page=${20}`
+    loadList(listUrl).then(posts => {
+        debugger
+    })
+}
+
+// _test_loadlist()
 
 async function _test_replyPost() {
     let post = {
