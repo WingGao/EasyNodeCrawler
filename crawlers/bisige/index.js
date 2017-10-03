@@ -164,7 +164,7 @@ function setPostFile(body$, dbPost) {
     if (a.length > 0) {
         a = a.eq(0)
         let href = a.attr('href').trim()
-        if (a.attr('onclick').indexOf('attachpay') > 0) {
+        if (a.attr('onclick') && a.attr('onclick').indexOf('attachpay') > 0) {
             //付费附件
             dbPost.purchase_url = href
         } else {
@@ -299,8 +299,9 @@ async function main() {
                         if (isReplied) {
                             replyedPostsNum += 1
                             //两次回复间隔2分钟
-                            logger.info('等待2分钟')
-                            await asyncWaitTime(2 * 60 * 1000)
+                            let waitTime = _.random(40, 2 * 60)
+                            logger.info(`等待${waitTime}秒`)
+                            await asyncWaitTime(waitTime * 1000)
                         }
                     } catch (e) {
                         post.can_replay = false
@@ -326,7 +327,7 @@ async function loopMain() {
         //7点之前停止回复
         if (new Date().getHours() < 7) {
             logger.info('暂停工作40分钟')
-            await asyncWaitTime(40 * 60 * 60 * 1000)
+            await asyncWaitTime(40 * 60 * 1000)
         } else {
             await main()
             logger.info('列表暂停5分钟')
