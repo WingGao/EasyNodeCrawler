@@ -173,14 +173,47 @@ function setPostFile(body$, dbPost) {
     }
 }
 
-function replyPost(dbPost) {
-    let postUrl = `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
+function getPostDsign(sc) {
+    let screg = /<script type="text\/javascript">(.+)<\/script>/g
+    sc = screg.exec(sc)[1]
+    let window = { _url: '' }
+    let location = {
+        href: '',
+        assign(u) {
+            window._url = u
+        }
+    }
+    eval(sc)
+    let u = _.find([window._url, location, _.get(location, 'href')], v => _.isString(v) && v.indexOf('_dsign') > 0)
+    if(u == null){
+        debugger
+    }
+    return qs.parse(u.split('?')[1])['_dsign']
+}
+
+function replyPost(dbPost, dsign) {
+    // let postUrl = `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
+    let postUrl = `http://www.bisige.net/forum.php?mod=viewthread&tid=${dbPost.pid}`
+    if (dsign != null) postUrl += `&_dsign=${dsign}`
+
     return new Promise((resolve, reject) => {
         logger.info('try reply post', postUrl)
         request.get(postUrl, async (error, response, body) => {
             if (error != null) reject(error)
             body = iconv.convert(body).toString()
             const $ = cheerio.load(body)
+            if (body.indexOf('<script') == 0) {
+                //被屏蔽了
+                let ds = getPostDsign(body)
+                try {
+                    let r = await replyPost(dbPost, ds)
+                    resolve(r)
+                } catch (e) {
+                    reject(e)
+                }
+                return
+            }
+
             let msgErr = $('#messagetext.alert_error')
             if (msgErr.length > 0) {
                 //没有权限
@@ -206,15 +239,21 @@ function replyPost(dbPost) {
                 resolve(false)
                 return
             }
+
             let postData = {
                 message: copyMsg,
-                formhash: replyForm.find('input[name=formhash]').attr('value'),
                 posttime: Math.floor(new Date().getTime() / 1000),
             }
+
+            let formhash = replyForm.find('input[name=formhash]')
+            if (formhash.length == 0) {
+                debugger
+            }
+            postData.formhash = formhash.attr('value')
             let secqaa = replyForm.find('span[id^=secqaa_]')
-            if(secqaa.length === 0){
+            if (secqaa.length === 0) {
                 //没有验证码
-            }else{
+            } else {
                 //验证问题
                 let secqaahash = secqaa.attr('id').split('_')[1]
                 postData.secqaahash = secqaahash
