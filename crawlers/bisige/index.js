@@ -181,32 +181,41 @@ function getPostDsign(sc) {
         href: '',
         assign(u) {
             window._url = u
-        }
+        },
+        replace(u) {
+            window._url = u
+        },
     }
     eval(sc)
     let u = _.find([window._url, location, _.get(location, 'href')], v => _.isString(v) && v.indexOf('_dsign') > 0)
-    if(u == null){
+    if (u == null) {
         debugger
     }
     return qs.parse(u.split('?')[1])['_dsign']
 }
 
-function replyPost(dbPost, dsign) {
+function replyPost(dbPost, opt = { dsign: null, refer: null, }) {
     // let postUrl = `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
     let postUrl = `http://www.bisige.net/forum.php?mod=viewthread&tid=${dbPost.pid}`
-    if (dsign != null) postUrl += `&_dsign=${dsign}`
+    if (opt.dsign != null) postUrl += `&_dsign=${opt.dsign}`
 
     return new Promise((resolve, reject) => {
         logger.info('try reply post', postUrl)
-        request.get(postUrl, async (error, response, body) => {
+        request.get({
+            url: postUrl,
+            headers: {
+                'Referer': opt.refer,
+            }
+        }, async (error, response, body) => {
             if (error != null) reject(error)
             body = iconv.convert(body).toString()
             const $ = cheerio.load(body)
             if (body.indexOf('<script') == 0) {
+                logger.warn('被防采集检测到，开始获取dsign，建议更换IP')
                 //被屏蔽了
                 let ds = getPostDsign(body)
                 try {
-                    let r = await replyPost(dbPost, ds)
+                    let r = await replyPost(dbPost, { dsign: ds })
                     resolve(r)
                 } catch (e) {
                     reject(e)
@@ -345,7 +354,7 @@ async function main() {
                 if (checkPostCanReply(p, post)) {
                     let isReplied = false
                     try {
-                        isReplied = await replyPost(post)
+                        isReplied = await replyPost(post, { refer: listUrl })
                         await post.save()
                         if (isReplied) {
                             replyedPostsNum += 1
@@ -398,7 +407,9 @@ async function loopMain() {
         }
     }
 }
-
+async function checkIn() {
+    //签到
+}
 buildRequest()
 //
 // main().then(res => {
