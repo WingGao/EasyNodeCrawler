@@ -178,7 +178,7 @@ function replyPost(dbPost) {
     return new Promise((resolve, reject) => {
         logger.info('try reply post', postUrl)
         request.get(postUrl, async (error, response, body) => {
-            if (error != null) reject()
+            if (error != null) reject(error)
             body = iconv.convert(body).toString()
             const $ = cheerio.load(body)
             let msgErr = $('#messagetext.alert_error')
@@ -206,15 +206,21 @@ function replyPost(dbPost) {
                 resolve(false)
                 return
             }
-            let secqaa = replyForm.find('span[id^=secqaa_]')
-            let secqaahash = secqaa.attr('id').split('_')[1]
             let postData = {
                 message: copyMsg,
                 formhash: replyForm.find('input[name=formhash]').attr('value'),
-                secqaahash: secqaahash,
-                secanswer: await getFormAnswer(dbPost.pid, secqaahash),
                 posttime: Math.floor(new Date().getTime() / 1000),
             }
+            let secqaa = replyForm.find('span[id^=secqaa_]')
+            if(secqaa.length === 0){
+                //没有验证码
+            }else{
+                //验证问题
+                let secqaahash = secqaa.attr('id').split('_')[1]
+                postData.secqaahash = secqaahash
+                postData.secanswer = await getFormAnswer(dbPost.pid, secqaahash)
+            }
+
             request.post({
                 url: replyUrl,
                 form: postData,
@@ -268,6 +274,12 @@ function asyncWaitTime(msec) {
     })
 }
 
+const MainCode = {
+    SUCCESS: 0,
+    ERR_MAX_HOUR_REPLY: 1,
+    ERR_COOKIE: 2,
+}
+
 async function main() {
     try {
         await checkLogin()
@@ -304,21 +316,25 @@ async function main() {
                             await asyncWaitTime(waitTime * 1000)
                         }
                     } catch (e) {
+                        //您所在的用户组每小时限制发回帖 20 个
+                        if (_.isString(e) && e.indexOf('每小时') > 0) {
+                            return MainCode.ERR_MAX_HOUR_REPLY
+                        }
                         post.can_replay = false
                         await post.save()
                     }
                     //最大回复数
                     if (replyedPostsNum >= MAX_REPLEY_NUM) {
-                        return
+                        return MainCode.SUCCESS
                     }
                 }
             }
             workPage.value = i
             await workPage.save()
-            // return
         }
     } catch (e) {
         logger.error('cookie过期')
+        return MainCode.ERR_COOKIE
     }
 }
 
@@ -329,9 +345,17 @@ async function loopMain() {
             logger.info('暂停工作40分钟')
             await asyncWaitTime(40 * 60 * 1000)
         } else {
-            await main()
-            logger.info('列表暂停5分钟')
-            await asyncWaitTime(5 * 60 * 1000)
+            let res = await main()
+            switch (res) {
+                case MainCode.ERR_COOKIE:
+                    return
+                // case MainCode.SUCCESS:
+                // case MainCode.ERR_MAX_HOUR_REPLY:
+                default:
+                    logger.info('列表暂停5分钟')
+                    await asyncWaitTime(5 * 60 * 1000)
+                    break;
+            }
         }
     }
 }
@@ -371,7 +395,7 @@ async function _test_replyPost() {
 
 function _test_getFile() {
     request.get('http://www.bisige.net/thread-532707-1-1.html', async (error, response, body) => {
-        if (error != null) reject()
+        if (error != null) return
         let p = {}
         body = iconv.convert(body).toString()
         const $ = cheerio.load(body)
