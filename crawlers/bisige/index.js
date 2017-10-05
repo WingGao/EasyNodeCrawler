@@ -190,12 +190,11 @@ function getPostDsign(sc) {
         eval(sc)
     } catch (e) {
         logger.warn('dsign错误', e)
-        debugger
         return
     }
     let u = _.find([window._url, location, _.get(location, 'href')], v => _.isString(v) && v.indexOf('_dsign') > 0)
     if (u == null) {
-        debugger
+        return
     }
     return qs.parse(u.split('?')[1])['_dsign']
 }
