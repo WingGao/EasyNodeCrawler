@@ -15,6 +15,7 @@ const fs = require('fs')
 const path = require('path')
 const qs = require('qs')
 const { Url } = require("url");
+const urlencode = require('urlencode');
 const { Queue } = require('../queue')
 const BHOST = 'http://www.bisige.net'
 const KEY_WORK_PAGE = 'bisige_work_page'
@@ -241,7 +242,7 @@ function replyPost(dbPost, opt = { dsign: null, refer: null, }) {
             }
             let msgs = $('td[id^=postmessage_]')
             let copyMsgNum = _.random(1, msgs.length - 1)
-            let copyMsg = msgs.eq(copyMsgNum).text()
+            let copyMsg = msgs.eq(copyMsgNum).text().trim().replace('\n', ' ')
             logger.info(`pid=${dbPost.pid}`, '回复内容：', copyMsgNum, copyMsg)
             let replyUrl = `http://www.bisige.net/forum.php?mod=post&action=reply&fid=18&tid=${dbPost.pid}&extra=page%3D2&replysubmit=yes&infloat=yes&handlekey=fastpost&inajax=1`
             let replyForm = $('#f_pst form')
@@ -276,9 +277,11 @@ function replyPost(dbPost, opt = { dsign: null, refer: null, }) {
 
             request.post({
                 url: replyUrl,
-                form: postData,
+                encoding: null,
+                body: urlencode.stringify(postData, { charset: 'gbk' }),
                 headers: {
-                    'Referer': `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`
+                    'Referer': `http://www.bisige.net/thread-${dbPost.pid}-1-2.html`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
                 }
             }, (error2, response2, body2) => {
                 if (error2 != null) reject()
