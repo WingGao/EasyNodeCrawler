@@ -15,6 +15,7 @@ export class Post {
   updateTime: Date; //最后更新日期
   parentPostId: string;
   categoryId: string;
+  viewNum: number; //查看次数
 
   uniqId() {
     return `${this.site}-${this.id}`;
@@ -48,6 +49,7 @@ export class Post {
             body: { type: 'text', analyzer: 'ik_max_word', search_analyzer: 'ik_smart' },
             createTime: { type: 'date' },
             updateTime: { type: 'date' },
+            viewNum: { type: 'integer' },
           },
         },
       },

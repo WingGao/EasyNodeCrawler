@@ -17,7 +17,15 @@ export class SiteConfig {
   siteType?: SiteType = SiteType.Normal;
   https?: boolean = false;
   logLevel?: string = 'debug';
+  beforeReq?: (res, done) => any; //处理函数
+  getHeaders?: () => any = () => {};
   afterReq: (res, done) => any; //处理函数
+  ex: any = {}; //额外的配置信息
+  crawler: any = {}; //爬虫参数
+
+  fullUrl(p) {
+    return `http${this.https ? 's' : ''}://${this.host}${p}`;
+  }
 }
 
 /**
@@ -25,6 +33,7 @@ export class SiteConfig {
  */
 export enum SiteType {
   Normal,
+  Discuz, //discuz论坛
 }
 
 /**

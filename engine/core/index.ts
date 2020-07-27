@@ -1,9 +1,12 @@
 import * as yargs from 'yargs';
-import { MainConfig } from './config';
+import { MainConfig, SiteConfig, SiteType } from './config';
 import path = require('path');
 import fs = require('fs');
 import ESClient from './es';
 import { Post } from './post';
+import Sites from '../sites';
+import * as _ from 'lodash';
+import { SiteCrawler, SiteCrawlerDiscuz } from './site';
 
 async function main() {
   let argv = yargs
@@ -13,10 +16,30 @@ async function main() {
         type: 'string',
         description: '配置文件',
       },
+      site: {
+        type: 'string',
+        description: '爬取的站点host',
+      },
     })
     .help('h')
     .alias('h', 'help').argv;
-  let config = MainConfig.loadYAML(path.resolve(argv.config));
+  await initConfig(argv.config);
+  let sites = Sites();
+  let sc = _.find(sites, (v) => v.host == argv.site);
+  let currentSite: SiteCrawler;
+  switch (sc.siteType) {
+    case SiteType.Discuz:
+      currentSite = new SiteCrawlerDiscuz(sc);
+      break;
+    default:
+      currentSite = new SiteCrawler(sc);
+      break;
+  }
+  currentSite.start();
+}
+
+export async function initConfig(configPath) {
+  let config = MainConfig.loadYAML(path.resolve(configPath));
   MainConfig.default(config);
   // 准备数据
   let esClient = ESClient.inst();
@@ -31,6 +54,9 @@ async function main() {
     MainConfig.logger().info('创建索引', post.indexName());
     let rep = await post._createIndex();
   }
+  return config;
 }
 
-main();
+if (require.main === module) {
+  main();
+}
