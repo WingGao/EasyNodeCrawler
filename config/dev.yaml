@@ -1,2 +1,7 @@
 es:
   node: 'http://localhost:9200'
+
+redis:
+  host: 172.29.88.37
+  port: 6379
+

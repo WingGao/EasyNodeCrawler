@@ -22,10 +22,17 @@ export class SiteConfig {
   afterReq: (res, done) => any; //处理函数
   ex: any = {}; //额外的配置信息
   crawler: any = {}; //爬虫参数
+  proxys: IProxy[] = []; //代理，第一个是主代理
+  toZh: boolean = false; //转为简体
+  saveBody: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
 
   fullUrl(p) {
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
+}
+interface IProxy {
+  type: 'http' | 'sock5';
+  addr: string; //xxx:xxx
 }
 
 /**
@@ -42,6 +49,10 @@ export enum SiteType {
 export class MainConfig {
   dataPrefix: string = 'node_crawler_';
   es: ClientOptions;
+  redis: {
+    host: string;
+    port: number;
+  };
 
   static default(c?: MainConfig) {
     if (c != null) {

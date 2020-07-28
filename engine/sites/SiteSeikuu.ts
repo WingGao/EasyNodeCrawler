@@ -4,15 +4,19 @@
 import { SiteConfig, SiteType } from '../core/config';
 import { initConfig } from '../core';
 import { SiteCrawlerDiscuz } from '../core/site';
+import { Post } from '../core/post';
+import cookies from './cookie';
 
 export default function getConfig() {
   let sc = new SiteConfig();
   sc.name = '星空论坛';
   sc.host = 'bbs2.seikuu.com';
-  sc.siteType = SiteType.Discuz;
+  sc.siteType = SiteType.Discuz; //Discuz! X3.4
+  sc.toZh = true;
+  sc.saveBody = 2;
   sc.getHeaders = () => {
     return {
-      cookie: `__cfduid=d5651d24c04171d62210076f2eee4279d1594969695; gAAn_ae8e_saltkey=DG4k55nH; gAAn_ae8e_lastvisit=1594966095; gAAn_ae8e_st_p=0%7C1594969720%7C071c7770bf03196a510807aaf34fe5a9; gAAn_ae8e_viewid=tid_160664; gAAn_ae8e_auth=cae0dr%2B5mhAeeluNPF8tv2O6XENC1DauziEVdMOVWRYX7Rawg7pjcKprQLnx6aWyhqd%2BenXm3gNu4pyjzzS4gOhxkE0; gAAn_ae8e_lastcheckfeed=493044%7C1595419322; gAAn_ae8e_connect_is_bind=1; gAAn_ae8e_nofavfid=1; gAAn_ae8e_visitedfid=85D112; gAAn_ae8e_pc_size_c=0; gAAn_ae8e_ulastactivity=7cbe2L2a%2BPNKlHVAU85WcfuCwahQH5mW7ORRrnXdqjtjD0g8NrgF; gAAn_ae8e_sid=nuF1nE; gAAn_ae8e_lip=101.230.10.252%2C1595840694; gAAn_ae8e_st_t=493044%7C1595843200%7C880279eed456bb3a0d4709c3a265d622; gAAn_ae8e_forum_lastvisit=D_112_1594969717D_85_1595843200; gAAn_ae8e_sendmail=1; gAAn_ae8e_checkpm=1; gAAn_ae8e_noticeTitle=1; gAAn_ae8e_lastact=1595843201%09misc.php%09patch`,
+      cookie: cookies[sc.host].cookie,
     };
   };
   sc.beforeReq = (options, done) => {
@@ -64,7 +68,7 @@ export default function getConfig() {
     { id: '35', name: '表·漫画资源原创专区', canShow: true },
     { id: '52', name: '里·漫画资源专区', canShow: false },
     { id: '33', name: '表·动画资源专区', canShow: true },
-    { id: '37', name: '表·动画资源原创专区', canShow: true },
+    { id: '37', name: '表·动画资源原创专区', canShow: true }, //需要35积分
     { id: '53', name: '里·动画资源专区', canShow: false },
     { id: '29', name: '萌の博物馆', canShow: true },
     { id: '98', name: '萌の博物馆原创专区', canShow: true },
@@ -86,6 +90,18 @@ if (require.main === module) {
     let site = new SiteCrawlerDiscuz(getConfig());
     // await site.checkCookie();
     // await site.listCategory();
-    site.start();
+    // site.start();
+    // await site.fetchPage(site.config.ex.categorys[0].id);
+    // await site.startFindLinks();
+    //
+    let post = new Post();
+    // post.site = site.config.host;
+    // post.id = '241331';
+    // post.url = '/forum.php?mod=viewthread&tid=241331';
+    // //繁体
+    post.id = '239842';
+    post.url = '/forum.php?mod=viewthread&tid=239842';
+    await site.fetchPost(post);
+    // site.startWorker();
   })();
 }

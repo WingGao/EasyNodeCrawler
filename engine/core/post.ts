@@ -3,14 +3,17 @@
  */
 import ESClient from './es';
 import { MainConfig } from './config';
+import brotli = require('brotli');
+import _ = require('lodash');
 
 export class Post {
   site: string; //站点的host
   id: string;
-  url: string;
+  url: string; //相对路径
   title: string; //标题
   authorId: string; //用户id
-  body: string; //正文内容
+  body: string; //正文内容，提取后的文本
+  bodyBin: any; //正文压缩的内容
   createTime: Date; //创建日期
   updateTime: Date; //最后更新日期
   parentPostId: string;
@@ -25,17 +28,47 @@ export class Post {
     return `${MainConfig.default().dataPrefix}post`;
   }
 
+  async getById(id: string) {
+    let res = await ESClient.inst()
+      .get({
+        index: this.indexName(),
+        id,
+      })
+      .catch((e) => e);
+
+    if (res.statusCode == 200) {
+      let p = new Post();
+      return _.merge(p, res.body._source);
+    } else {
+      return null;
+    }
+  }
   async save() {
-    let res = await ESClient.inst().create({
+    let pa = {
       index: this.indexName(),
       id: this.uniqId(),
       body: this,
-    });
-    debugger;
+    };
+    // debugger;
+    let res = await ESClient.inst()
+      .create(pa)
+      .catch((e) => {
+        return e;
+      });
+    if (res.statusCode == 201) {
+      return true;
+    } else {
+      switch (res.message) {
+        case 'version_conflict_engine_exception': //重复
+          return false;
+        default:
+          throw res;
+      }
+    }
   }
 
   async _createIndex() {
-    let res = await ESClient.inst().index({
+    let res = await ESClient.inst().indices.create({
       index: this.indexName(),
       body: {
         mappings: {
@@ -47,6 +80,7 @@ export class Post {
             parentPostId: { type: 'keyword' },
             title: { type: 'text', analyzer: 'ik_max_word', search_analyzer: 'ik_smart' },
             body: { type: 'text', analyzer: 'ik_max_word', search_analyzer: 'ik_smart' },
+            bodyBin: { type: 'binary' },
             createTime: { type: 'date' },
             updateTime: { type: 'date' },
             viewNum: { type: 'integer' },
@@ -54,5 +88,21 @@ export class Post {
         },
       },
     });
+  }
+
+  encodeBody(sc: number) {
+    switch (sc) {
+      case 1:
+        break;
+      case 2:
+        this.bodyBin = Buffer.from(brotli.compress(Buffer.from(this.bodyBin))).toString('base64');
+        break;
+      default:
+        this.bodyBin = null;
+    }
+  }
+  decodeBodyBrotli() {
+    let b = Buffer.from(this.bodyBin, 'base64');
+    return Buffer.from(brotli.decompress(b)).toString();
   }
 }
