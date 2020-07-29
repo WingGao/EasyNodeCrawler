@@ -55,9 +55,23 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     });
     console.log(JSON.stringify(blocks));
   }
+  checkPermission($) {
+    let $alert = $('#messagetext');
+    if ($alert.length > 0) {
+      let msg = $alert.text().trim();
+      this.logger.error(msg);
+      if (/(没有权限)|(需要升级)/.test(msg)) {
+      } else {
+        throw new Error(msg);
+      }
+      return false;
+    } else {
+      return true;
+    }
+  }
 
   async fetchPage(cateId) {
-    let pageMax = 99;
+    let pageMax = 1;
     for (let page = 1; page <= pageMax; page++) {
       // 按发帖时间
       let listUrl = this.config.fullUrl(
@@ -66,7 +80,10 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       this.logger.info('获取', listUrl);
       let rep = await this.axiosInst.get(listUrl);
       let $ = cheerio.load(rep.data);
-
+      if (!this.checkPermission($)) {
+        //没有权限
+        continue;
+      }
       let ps = [];
       for (let tbody of $('#threadlist #threadlisttableid tbody')) {
         let $tbody = $(tbody);
@@ -107,6 +124,10 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
 
   // 专门解析post
   async parsePost(post: Post, $) {
+    if (!this.checkPermission($)) {
+      //没有权限
+      return;
+    }
     let found = false;
     let $tds = $($('#postlist > table').get(0)).find('td');
     post.site = this.config.host;

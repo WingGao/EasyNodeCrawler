@@ -19,6 +19,7 @@ export class Post {
   parentPostId: string;
   categoryId: string;
   viewNum: number; //查看次数
+  replyNum: number; //回复数
 
   uniqId() {
     return `${this.site}-${this.id}`;
@@ -84,6 +85,7 @@ export class Post {
             createTime: { type: 'date' },
             updateTime: { type: 'date' },
             viewNum: { type: 'integer' },
+            replyNum: { type: 'integer' },
           },
         },
       },

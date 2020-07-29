@@ -129,8 +129,10 @@ export class SiteCrawler {
     if ((await Redis.lock(lockKey)) == true) {
       let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
       post = await this.parsePost(post, cheerio.load(rep.data));
-      await post.save();
-      this.logger.info('Post保存', post.uniqId(), post.title);
+      if (post != null) {
+        await post.save();
+        this.logger.info('Post保存', post.uniqId(), post.title);
+      }
       await Redis.unlock(lockKey);
       return true;
     } else {
