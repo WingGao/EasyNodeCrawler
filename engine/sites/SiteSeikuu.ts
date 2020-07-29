@@ -16,9 +16,10 @@ export default function getConfig() {
   sc.toZh = true;
   sc.saveBody = 2;
   sc.myUsername = 'shaziniu';
+  sc.cookie = cookies[sc.host].cookie;
   sc.getHeaders = () => {
     return {
-      cookie: cookies[sc.host].cookie,
+      cookie: sc.cookie,
     };
   };
   sc.beforeReq = (options, done) => {
@@ -27,7 +28,7 @@ export default function getConfig() {
   sc.crawler = {
     maxConnections: 2,
   };
-  sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
+  // sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
   // sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
   //要爬取的板块
   sc.ex.categorys = [

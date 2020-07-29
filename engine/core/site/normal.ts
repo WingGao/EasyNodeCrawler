@@ -9,6 +9,7 @@ import * as iconv from 'iconv-lite';
 import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
+import { WebDriver } from 'selenium-webdriver';
 
 export class SiteCrawler {
   config: SiteConfig;
@@ -200,6 +201,13 @@ export class SiteCrawler {
     queueEvents.on('progress', ({ jobId, data }, timestamp) => {
       console.log(`${jobId} reported progress ${data} at ${timestamp}`);
     });
+  }
+
+  // selenium
+  async getSelenium(): Promise<WebDriver> {
+    const { Builder, By, Key, until } = require('selenium-webdriver');
+    let driver = await new Builder().forBrowser('firefox').build();
+    return driver;
   }
 }
 

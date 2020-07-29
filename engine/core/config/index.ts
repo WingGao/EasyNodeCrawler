@@ -11,6 +11,7 @@ import { getLogger } from 'log4js';
 /**
  * 爬取站点的配置
  */
+
 export class SiteConfig {
   name: string;
   host: string;
@@ -19,14 +20,21 @@ export class SiteConfig {
   logLevel?: string = 'debug';
   beforeReq?: (res, done) => any; //处理函数
   getHeaders?: () => any = () => {};
-  afterReq: (res, done) => any; //处理函数
-  ex: any = {}; //额外的配置信息
-  crawler: any = {}; //爬虫参数
-  proxys: IProxy[] = []; //代理，第一个是主代理
-  toZh: boolean = false; //转为简体
-  saveBody: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
-  enableSave: boolean = true; //是否开启保存
+  cookie?: string;
+  afterReq?: (res, done) => any; //处理函数
+  ex?: any = {}; //额外的配置信息
+  crawler?: any = {}; //爬虫参数
+  proxys?: IProxy[] = []; //代理，第一个是主代理
+  toZh?: boolean = false; //转为简体
+  saveBody?: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
+  enableSave?: boolean = true; //是否开启保存
   myUsername?: string; //我的用户名，区分用户
+  selenium?: boolean = false;
+
+  constructor(props?: Partial<SiteConfig>) {
+    _.merge(this, props);
+  }
+
   fullUrl(p) {
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
