@@ -1,2 +1,6 @@
-jest.mock('brotli', () => {});
+jest.mock('brotli', () => ({
+  compress(e) {
+    return '';
+  },
+}));
 // console.log('mock');

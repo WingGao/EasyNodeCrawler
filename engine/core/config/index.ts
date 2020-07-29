@@ -25,14 +25,15 @@ export class SiteConfig {
   proxys: IProxy[] = []; //代理，第一个是主代理
   toZh: boolean = false; //转为简体
   saveBody: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
-
+  enableSave: boolean = true; //是否开启保存
   fullUrl(p) {
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
 }
 interface IProxy {
   type: 'http' | 'sock5';
-  addr: string; //xxx:xxx
+  host: string;
+  port?: number;
 }
 
 /**

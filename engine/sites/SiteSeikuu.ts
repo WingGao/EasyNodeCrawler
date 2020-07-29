@@ -11,6 +11,7 @@ export default function getConfig() {
   let sc = new SiteConfig();
   sc.name = '星空论坛';
   sc.host = 'bbs2.seikuu.com';
+  sc.https = true;
   sc.siteType = SiteType.Discuz; //Discuz! X3.4
   sc.toZh = true;
   sc.saveBody = 2;
@@ -25,6 +26,7 @@ export default function getConfig() {
   sc.crawler = {
     maxConnections: 2,
   };
+  sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
   //要爬取的板块
   sc.ex.categorys = [
     { id: '85', name: '日式游戏综合讨论专区', canShow: true },

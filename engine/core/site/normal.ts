@@ -3,7 +3,7 @@ import { getLogger, Logger } from 'log4js';
 import * as _ from 'lodash';
 import * as Crawler from 'crawler';
 import { Post } from '../post';
-import axios, { AxiosInstance } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import * as iconv from 'iconv-lite';
 import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
@@ -17,8 +17,14 @@ export class SiteCrawler {
 
   constructor(config: SiteConfig) {
     this.config = config;
-    this.axiosInst = axios.create({
-      headers: config.getHeaders(),
+    let axc: AxiosRequestConfig = {
+      headers: _.merge(
+        {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36',
+        },
+        config.getHeaders(),
+      ),
       responseType: 'arraybuffer',
       transformResponse: [
         (data, headers) => {
@@ -29,7 +35,18 @@ export class SiteCrawler {
           return data;
         },
       ],
-    });
+    };
+    // TODO 更好的代理轮训
+    if (_.size(config.proxys) > 0) {
+      let p = config.proxys[0];
+      if (p.type == 'http') {
+        axc.proxy = {
+          host: p.host,
+          port: p.port,
+        };
+      }
+    }
+    this.axiosInst = axios.create(axc);
     // 单个站点单个队列
     this.queue = new Queue(this._queueName(), {
       connection: {
@@ -129,7 +146,7 @@ export class SiteCrawler {
     if ((await Redis.lock(lockKey)) == true) {
       let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
       post = await this.parsePost(post, cheerio.load(rep.data));
-      if (post != null) {
+      if (post != null && this.config.enableSave) {
         await post.save();
         this.logger.info('Post保存', post.uniqId(), post.title);
       }

@@ -132,8 +132,11 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let $tds = $($('#postlist > table').get(0)).find('td');
     post.site = this.config.host;
     if (post.viewNum == null) {
-      let v1 = $($tds.get(0)).find('span').get(1);
+      // 查看: 547|回复: 294
+      let sps = $($tds.get(0)).find('span');
+      let v1 = sps.get(1);
       post.viewNum = parseInt($(v1).text());
+      post.replyNum = parseInt($(sps.get(4)).text());
     }
     if (post.title == null) {
       post.title = $('#thread_subject').text().trim();
