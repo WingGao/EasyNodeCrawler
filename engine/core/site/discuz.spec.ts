@@ -17,13 +17,30 @@ beforeAll(async () => {
   testConfig.enableSave = false;
   site = new SiteCrawlerDiscuz(testConfig);
 });
-describe('discuz-测试Seikuu', () => {
+describe('discuz-测试Seikuu-列表', () => {
+  test('列表解析', async () => {
+    let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&filter=lastpost&orderby=lastpost`;
+    let res = await site.fetchPage(url);
+    expect(res.posts).toHaveLength(30);
+  });
+});
+
+describe('discuz-测试Seikuu-文章', () => {
   test('文章解析', async () => {
     let post = new Post();
     post.site = site.config.host;
     post.id = '243457';
     post.url = '/forum.php?mod=viewthread&tid=243457';
     await site.fetchPost(post);
+    expect(post.replyNum).toBeGreaterThan(1);
+  });
+
+  test('文章解析-空内容', async () => {
+    let post = new Post();
+    post.site = site.config.host;
+    post.id = '195340';
+    post.url = '/forum.php?mod=viewthread&tid=195340';
+    expect(await site.fetchPost(post)).toBeTruthy();
     expect(post.replyNum).toBeGreaterThan(1);
   });
 

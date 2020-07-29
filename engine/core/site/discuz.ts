@@ -55,12 +55,13 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     });
     console.log(JSON.stringify(blocks));
   }
+
   checkPermission($) {
     let $alert = $('#messagetext');
     if ($alert.length > 0) {
       let msg = $alert.text().trim();
       this.logger.error(msg);
-      if (/(没有权限)|(需要升级)/.test(msg)) {
+      if (/(权限)|(需要升级)/.test(msg)) {
       } else {
         throw new Error(msg);
       }
@@ -70,43 +71,62 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     }
   }
 
-  async fetchPage(cateId) {
+  async fetchPage(pageUrl) {
+    this.logger.info('获取', pageUrl);
+    let rep = await this.axiosInst.get(pageUrl);
+    let $ = cheerio.load(rep.data);
+    if (!this.checkPermission($)) {
+      //没有权限
+      return;
+    }
+    let posts = [];
+    for (let tbody of $('#threadlist #threadlisttableid tbody')) {
+      let $tbody = $(tbody);
+      // 排除置顶的
+      let attId = $tbody.attr('id');
+      let post = this.createPost();
+      if (attId.indexOf('normalthread') >= 0) {
+        post.id = getInt(attId).toString();
+        post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
+        post.viewNum = parseInt($tbody.find('.num>em').text());
+        post.replyNum = parseInt($tbody.find('.num>a').text());
+        post._lastReplyUser = $tbody.find('.by cite').text().trim();
+        // 添加到队列
+        posts.push(post);
+      }
+    }
+    // 获取max
+    let pageMax = 1;
+    let spanT = $('#fd_page_top label span').text();
+    if (spanT.length == 0 && posts.length > 0) {
+      pageMax = 1;
+    } else {
+      let pageG = /(\d+)/.exec(spanT);
+      pageMax = parseInt(pageG[1]);
+    }
+    return { posts, $, pageMax };
+  }
+
+  async fetchPages(cateId) {
     let pageMax = 1;
     for (let page = 1; page <= pageMax; page++) {
       // 按发帖时间
       let listUrl = this.config.fullUrl(
         `/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`,
       );
-      this.logger.info('获取', listUrl);
-      let rep = await this.axiosInst.get(listUrl);
-      let $ = cheerio.load(rep.data);
-      if (!this.checkPermission($)) {
+      let res = await this.fetchPage(listUrl);
+
+      if (res == null) {
         //没有权限
         continue;
       }
-      let ps = [];
-      for (let tbody of $('#threadlist #threadlisttableid tbody')) {
-        let $tbody = $(tbody);
-        // 排除置顶的
-        let attId = $tbody.attr('id');
-        let post = this.createPost();
-        if (attId.indexOf('normalthread') >= 0) {
-          post.id = getInt(attId).toString();
-          post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
-          post.viewNum = parseInt($tbody.find('.num>em').text());
-          // 添加到队列
-          ps.push(this.queueAddPost(post));
-        }
-      }
+
+      let ps = res.posts.map((v) => {
+        return this.queueAddPost(v);
+      });
+
       if (page == 1) {
-        // 获取max
-        let spanT = $('#fd_page_top label span').text();
-        if (spanT.length == 0 && ps.length > 0) {
-          pageMax = 1;
-        } else {
-          let pageG = /(\d+)/.exec(spanT);
-          pageMax = parseInt(pageG[1]);
-        }
+        pageMax = res.pageMax;
         this.logger.info('最大', pageMax);
       }
       this.logger.info('添加任务', ps.length);
@@ -117,7 +137,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
   async startFindLinks(): Promise<any> {
     for (let cate of this.config.ex.categorys) {
       this.logger.info('处理', cate.name);
-      await this.fetchPage(cate.id);
+      await this.fetchPages(cate.id);
     }
     this.logger.info('获取post链接完毕');
   }
@@ -131,13 +151,12 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let found = false;
     let $tds = $($('#postlist > table').get(0)).find('td');
     post.site = this.config.host;
-    if (post.viewNum == null) {
-      // 查看: 547|回复: 294
-      let sps = $($tds.get(0)).find('span');
-      let v1 = sps.get(1);
-      post.viewNum = parseInt($(v1).text());
-      post.replyNum = parseInt($(sps.get(4)).text());
-    }
+    // 查看: 547|回复: 294
+    let sps = $($tds.get(0)).find('span');
+    let v1 = sps.get(1);
+    post.viewNum = parseInt($(v1).text());
+    post.replyNum = parseInt($(sps.get(4)).text());
+
     if (post.title == null) {
       post.title = $('#thread_subject').text().trim();
     }

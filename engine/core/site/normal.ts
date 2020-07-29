@@ -4,6 +4,7 @@ import * as _ from 'lodash';
 import * as Crawler from 'crawler';
 import { Post } from '../post';
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import * as iconv from 'iconv-lite';
 import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
@@ -31,7 +32,7 @@ export class SiteCrawler {
           if (headers['content-type'] && headers['content-type'].indexOf('gbk') > 0) {
             return iconv.decode(data, 'gbk');
           }
-          debugger;
+          // debugger;
           return data;
         },
       ],
@@ -39,11 +40,21 @@ export class SiteCrawler {
     // TODO 更好的代理轮训
     if (_.size(config.proxys) > 0) {
       let p = config.proxys[0];
-      if (p.type == 'http') {
-        axc.proxy = {
-          host: p.host,
-          port: p.port,
-        };
+      switch (p.type) {
+        case 'http':
+          axc.proxy = {
+            host: p.host,
+            port: p.port,
+          };
+          break;
+        case 'sock5':
+          let httpAgent = new SocksProxyAgent({
+            host: p.host,
+            port: p.port,
+          });
+          axc.httpAgent = httpAgent;
+          axc.httpsAgent = httpAgent;
+          break;
       }
     }
     this.axiosInst = axios.create(axc);
@@ -147,6 +158,7 @@ export class SiteCrawler {
       let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
       post = await this.parsePost(post, cheerio.load(rep.data));
       if (post != null && this.config.enableSave) {
+        //那些有问题的post不保存
         await post.save();
         this.logger.info('Post保存', post.uniqId(), post.title);
       }
@@ -159,6 +171,7 @@ export class SiteCrawler {
   }
 
   async startWorker() {
+    //TODO 目前是单个worker
     const worker = new Worker(
       this._queueName(),
       async (job) => {
@@ -175,7 +188,7 @@ export class SiteCrawler {
       },
     );
     worker.on('failed', (job, err) => {
-      this.logger.error(`${job.id} has failed with ${err.message}`);
+      this.logger.error(`${job.id} ${job.data.url} has failed with ${err.message}`);
     });
 
     const queueEvents = new QueueEvents(this._queueName(), {

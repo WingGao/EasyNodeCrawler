@@ -15,6 +15,7 @@ export default function getConfig() {
   sc.siteType = SiteType.Discuz; //Discuz! X3.4
   sc.toZh = true;
   sc.saveBody = 2;
+  sc.myUsername = 'shaziniu';
   sc.getHeaders = () => {
     return {
       cookie: cookies[sc.host].cookie,
@@ -27,6 +28,7 @@ export default function getConfig() {
     maxConnections: 2,
   };
   sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
+  // sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
   //要爬取的板块
   sc.ex.categorys = [
     { id: '85', name: '日式游戏综合讨论专区', canShow: true },
@@ -92,18 +94,17 @@ if (require.main === module) {
     let site = new SiteCrawlerDiscuz(getConfig());
     // await site.checkCookie();
     // await site.listCategory();
-    // site.start();
     // await site.fetchPage(site.config.ex.categorys[0].id);
     // await site.startFindLinks();
     //
-    let post = new Post();
-    // post.site = site.config.host;
-    // post.id = '241331';
-    // post.url = '/forum.php?mod=viewthread&tid=241331';
-    // //繁体
-    post.id = '239842';
-    post.url = '/forum.php?mod=viewthread&tid=239842';
-    await site.fetchPost(post);
-    // site.startWorker();
+    // let post = new Post();
+    // // post.site = site.config.host;
+    // // post.id = '241331';
+    // // post.url = '/forum.php?mod=viewthread&tid=241331';
+    // // //繁体
+    // post.id = '239842';
+    // post.url = '/forum.php?mod=viewthread&tid=239842';
+    // await site.fetchPost(post);
+    site.startWorker();
   })();
 }

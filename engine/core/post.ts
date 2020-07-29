@@ -20,6 +20,8 @@ export class Post {
   categoryId: string;
   viewNum: number; //查看次数
   replyNum: number; //回复数
+  // _开头的都是不保存的属性
+  _lastReplyUser: any;
 
   uniqId() {
     return `${this.site}-${this.id}`;
@@ -45,10 +47,13 @@ export class Post {
     }
   }
   async save() {
+    let body = _.pickBy(this, (v, k) => {
+      return k.indexOf('_') != 0;
+    });
     let pa = {
       index: this.indexName(),
       id: this.uniqId(),
-      body: this,
+      body,
     };
     // debugger;
     let res = await ESClient.inst()
