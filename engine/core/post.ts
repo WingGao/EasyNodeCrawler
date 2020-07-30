@@ -20,9 +20,12 @@ export class Post {
   categoryId: string;
   viewNum: number; //查看次数
   replyNum: number; //回复数
+  canReply: boolean; //能否回复
   // _开头的都是不保存的属性
   _lastReplyUser: any;
-
+  _replyList: Array<Post>; //回复列表
+  _innerId: number; //楼层号
+  _currentPage: number; //所在页码
   uniqId() {
     return `${this.site}-${this.id}`;
   }
@@ -91,6 +94,7 @@ export class Post {
             updateTime: { type: 'date' },
             viewNum: { type: 'integer' },
             replyNum: { type: 'integer' },
+            canReply: { type: 'boolean' },
           },
         },
       },

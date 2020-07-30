@@ -10,12 +10,14 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
+import { addCookie } from '../utils';
 
 export class SiteCrawler {
   config: SiteConfig;
   axiosInst: AxiosInstance;
   queue: Queue;
-  protected logger: Logger;
+  logger: Logger;
+  private driver: WebDriver;
 
   constructor(config: SiteConfig) {
     this.config = config;
@@ -144,11 +146,16 @@ export class SiteCrawler {
     });
   }
   // 专门解析post
-  async parsePost(post: Post, $) {
+  async parsePost(post: Post, $, pcf?: any) {
     return post;
   }
 
-  async fetchPost(post: Post) {
+  async fetchPost(post: Post, pcf?: any) {
+    let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
+    post = await this.parsePost(post, cheerio.load(rep.data), pcf);
+    return post;
+  }
+  async fetchPostAndSave(post: Post) {
     // 先判断是否存在
     if ((await post.getById(post.uniqId())) != null) {
       this.logger.info('Post已存在', post.uniqId());
@@ -156,8 +163,7 @@ export class SiteCrawler {
     }
     let lockKey = 'lock:' + post.uniqId();
     if ((await Redis.lock(lockKey)) == true) {
-      let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
-      post = await this.parsePost(post, cheerio.load(rep.data));
+      post = await this.fetchPost(post);
       if (post != null && this.config.enableSave) {
         //那些有问题的post不保存
         await post.save();
@@ -180,7 +186,7 @@ export class SiteCrawler {
         // and { qux: 'baz' } for the second.
         let p = this.createPost();
         p = _.merge(p, job.data);
-        await this.fetchPost(p);
+        await this.fetchPostAndSave(p);
       },
       {
         connection: {
@@ -205,9 +211,13 @@ export class SiteCrawler {
 
   // selenium
   async getSelenium(): Promise<WebDriver> {
-    const { Builder, By, Key, until } = require('selenium-webdriver');
-    let driver = await new Builder().forBrowser('firefox').build();
-    return driver;
+    if (this.driver == null) {
+      const { Builder, By, Key, until } = require('selenium-webdriver');
+      let driver = await new Builder().forBrowser('firefox').build();
+      await addCookie(driver, this.config.cookie, this.config.fullUrl('/'));
+      this.driver = driver;
+    }
+    return this.driver;
   }
 }
 

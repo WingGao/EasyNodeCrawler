@@ -17,6 +17,7 @@
     "iconv-lite": "^0.6.2",
     "lodash": "^4.17.19",
     "log4js": "^6.3.0",
+    "moment": "^2.27.0",
     "opencc": "^1.1.1",
     "qs": "^6.9.4",
     "selenium-webdriver": "^4.0.0-alpha.7",

@@ -6,6 +6,9 @@ import { initConfig } from '../core';
 import { SiteCrawlerDiscuz } from '../core/site';
 import { Post } from '../core/post';
 import cookies from './cookie';
+import * as yargs from 'yargs';
+import SpamDiscuz from '../spam/site/discuz';
+import _ = require('lodash');
 
 export default function getConfig() {
   let sc = new SiteConfig();
@@ -16,6 +19,7 @@ export default function getConfig() {
   sc.toZh = true;
   sc.saveBody = 2;
   sc.myUsername = 'shaziniu';
+  sc.myUserId = '493044';
   sc.cookie = cookies[sc.host].cookie;
   sc.getHeaders = () => {
     return {
@@ -29,7 +33,7 @@ export default function getConfig() {
     maxConnections: 2,
   };
   // sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
-  // sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
+  sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
   //要爬取的板块
   sc.ex.categorys = [
     { id: '85', name: '日式游戏综合讨论专区', canShow: true },
@@ -92,7 +96,19 @@ export default function getConfig() {
 if (require.main === module) {
   (async () => {
     await initConfig('config/dev.yaml');
-    let site = new SiteCrawlerDiscuz(getConfig());
+    let cnf = getConfig();
+    let site = new SiteCrawlerDiscuz(cnf);
+    let spam = new SpamDiscuz(cnf);
+    if (_.size(yargs.argv._) == 0) {
+      site.startWorker();
+    } else {
+      switch (yargs.argv._[0]) {
+        case 'shui':
+          await spam.shuiLou('243457', { checkInterval: 2 * 60 });
+          break;
+      }
+    }
+
     // await site.checkCookie();
     // await site.listCategory();
     // await site.fetchPage(site.config.ex.categorys[0].id);
@@ -106,6 +122,6 @@ if (require.main === module) {
     // post.id = '239842';
     // post.url = '/forum.php?mod=viewthread&tid=239842';
     // await site.fetchPost(post);
-    site.startWorker();
+    // site.startWorker();
   })();
 }

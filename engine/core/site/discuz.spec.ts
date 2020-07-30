@@ -16,12 +16,20 @@ beforeAll(async () => {
   testConfig = SiteSeikuu();
   testConfig.enableSave = false;
   site = new SiteCrawlerDiscuz(testConfig);
+  jest.setTimeout(3 * 60 * 1000);
 });
 describe('discuz-测试Seikuu-列表', () => {
   test('列表解析', async () => {
     let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&filter=lastpost&orderby=lastpost`;
     let res = await site.fetchPage(url);
     expect(res.posts).toHaveLength(30);
+  });
+  test('列表解析-锁定', async () => {
+    let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&orderby=replies&orderby=replies&filter=reply&page=1`;
+    let res = await site.fetchPage(url);
+    expect(res.posts).toHaveLength(30);
+    let post = res.posts[0];
+    expect(post.canReply).toBeFalsy();
   });
 });
 
@@ -33,6 +41,7 @@ describe('discuz-测试Seikuu-文章', () => {
     post.url = '/forum.php?mod=viewthread&tid=243457';
     await site.fetchPost(post);
     expect(post.replyNum).toBeGreaterThan(1);
+    expect(post.canReply).toBeTruthy();
   });
 
   test('文章解析-空内容', async () => {
@@ -42,6 +51,14 @@ describe('discuz-测试Seikuu-文章', () => {
     post.url = '/forum.php?mod=viewthread&tid=195340';
     expect(await site.fetchPost(post)).toBeTruthy();
     expect(post.replyNum).toBeGreaterThan(1);
+  });
+  test('文章解析-无法回复', async () => {
+    let post = new Post();
+    post.site = site.config.host;
+    post.id = '86067';
+    post.url = '/forum.php?mod=viewthread&tid=86067';
+    expect(await site.fetchPost(post)).toBeTruthy();
+    expect(post.canReply).toBeFalsy();
   });
 
   test('测试无权限板块', async () => {

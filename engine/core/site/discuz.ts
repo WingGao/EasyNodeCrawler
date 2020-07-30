@@ -90,6 +90,8 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
         post.viewNum = parseInt($tbody.find('.num>em').text());
         post.replyNum = parseInt($tbody.find('.num>a').text());
+        let $th = $tbody.find('th');
+        post.canReply = $th.attr('class').indexOf('lock') < 0;
         post._lastReplyUser = $tbody.find('.by cite').text().trim();
         // 添加到队列
         posts.push(post);
@@ -142,12 +144,33 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     this.logger.info('获取post链接完毕');
   }
 
+  //将楼层转换为数字
+  parseInnerId(str: string) {
+    switch (str) {
+      case '楼主':
+        return 1;
+      case '沙发':
+        return 2;
+      case '板凳':
+        return 3;
+      case '地板':
+        return 4;
+      default:
+        return parseInt(str);
+    }
+  }
   // 专门解析post
-  async parsePost(post: Post, $) {
+  async parsePost(post: Post, $, pcf) {
     if (!this.checkPermission($)) {
       //没有权限
       return;
     }
+    pcf = _.merge(
+      {
+        onlyMain: true, //只处理楼主
+      },
+      pcf,
+    );
     let found = false;
     let $tds = $($('#postlist > table').get(0)).find('td');
     post.site = this.config.host;
@@ -156,7 +179,8 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let v1 = sps.get(1);
     post.viewNum = parseInt($(v1).text());
     post.replyNum = parseInt($(sps.get(4)).text());
-
+    post._currentPage = parseInt($('#pgt strong').text());
+    post.canReply = $('#post_reply').length > 0;
     if (post.title == null) {
       post.title = $('#thread_subject').text().trim();
     }
@@ -171,39 +195,48 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         throw new Error('未处理' + cah);
       }
     }
-
+    let replyList = [];
     $('#postlist > div').each((pi, p) => {
-      if (found) return; //只处理楼主
+      if (found && pcf.onlyMain) return; //只处理楼主
       let $p = $(p);
       if ($p.attr('id').indexOf('post_') >= 0) {
         let pid = getInt($p.attr('id'));
         // 处理作者
         let $author = $p.find('.favatar .authi a');
-        post.authorId = /uid=(\d+)/.exec($author.attr('href'))[1];
+        let reply = new Post();
+        reply.authorId = /uid=(\d+)/.exec($author.attr('href'))[1];
         // 创建时间
         let createDate = $p.find(`#authorposton${pid}`).text().split('于')[1];
-        post.createTime = new Date(createDate);
-        post.updateTime = post.createTime;
+        reply.createTime = new Date(createDate);
+        reply.updateTime = post.createTime;
+        reply._innerId = this.parseInnerId($p.find(`#postnum${pid}`).text().trim());
         // 正文
         let $body = $(`#postmessage_${pid}`);
-        post.body = $body.text().trim();
-        post.bodyBin = $body.html().trim();
+        reply.body = $body.text().trim();
+        reply.bodyBin = $body.html().trim();
+
         // 更新时间
         $p.find('.pstatus').each((psi, ps) => {
           let pst = $(ps).text();
           if (pst.indexOf('本帖最后由') >= 0) {
             let ud = /(\d{4}-\d+-\d+ \d+:\d+)/.exec(pst)[1];
-            post.updateTime = new Date(ud);
+            reply.updateTime = new Date(ud);
           }
         });
         found = true;
+        replyList.push(reply);
       }
     });
+    if (found) {
+      post = _.merge(post, replyList[0]);
+    }
+
     if (this.config.toZh) {
       post.title = await toZhSimple(post.title);
       post.body = await toZhSimple(post.body);
     }
     post.encodeBody(this.config.saveBody);
+    post._replyList = replyList;
     return post;
   }
 }

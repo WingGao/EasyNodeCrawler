@@ -29,6 +29,7 @@ export class SiteConfig {
   saveBody?: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
   enableSave?: boolean = true; //是否开启保存
   myUsername?: string; //我的用户名，区分用户
+  myUserId?: string;
   selenium?: boolean = false;
 
   constructor(props?: Partial<SiteConfig>) {
