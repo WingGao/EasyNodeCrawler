@@ -31,6 +31,10 @@ describe('discuz-测试Seikuu-列表', () => {
     let post = res.posts[0];
     expect(post.canReply).toBeFalsy();
   });
+  test('123', async () => {
+    const notifier = require('node-notifier');
+    notifier.notify('Message');
+  });
 });
 
 describe('discuz-测试Seikuu-文章', () => {

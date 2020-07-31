@@ -1,4 +1,4 @@
-import SpamNormal from './normal';
+import SpamNormal, { ISpamActionConfig } from './normal';
 import { SiteCrawlerDiscuz } from '../../core/site';
 import { SiteConfig } from '../../core/config';
 import { addCookie, waitUntilLoad } from '../../core/utils';
@@ -48,14 +48,12 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
     }
   }
 
+  // dsu签到
+  async checkIn() {
+    //https://bbs2.seikuu.com/plugin.php?id=dsu_paulsign:sign
+  }
   // 水楼，一直不停的回复某个帖子，禁止三连
-  async shuiLou(
-    tid,
-    cf?: {
-      checkInterval?: number; //检查时间，秒
-      maxContinuous?: number; //连续回复数，
-    },
-  ) {
+  async shuiLou(tid, cf?: ISpamActionConfig) {
     cf = _.merge(
       {
         checkInterval: 5 * 60,
@@ -95,5 +93,12 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
       await sleep(st);
     }
   }
+
+  /**
+   * 水板块
+   * @param cateIds
+   * @param cf
+   */
+  async shuiCategory(cateIds: Array<string>, cf?: ISpamActionConfig) {}
   async start(args: { cates: Array<any> }) {}
 }

@@ -20,3 +20,8 @@ export default class SpamNormal {
     return haoList[_.random(0, haoList.length - 1)];
   }
 }
+
+export interface ISpamActionConfig {
+  checkInterval?: number;
+  maxContinuous?: number;
+}
