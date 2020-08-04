@@ -64,6 +64,7 @@ export class MainConfig {
     host: string;
     port: number;
   };
+  wgwHost?: string = 'https://wgw.suamo.art';
 
   static default(c?: MainConfig) {
     if (c != null) {

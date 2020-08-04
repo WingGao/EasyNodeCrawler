@@ -2,16 +2,36 @@ import SpamNormal, { ISpamActionConfig } from './normal';
 import { SiteCrawlerDiscuz } from '../../core/site';
 import { SiteConfig } from '../../core/config';
 import { addCookie, waitUntilLoad } from '../../core/utils';
-import { By, until } from 'selenium-webdriver';
+import { By, until, WebDriver } from 'selenium-webdriver';
 import _ = require('lodash');
 import { sleep } from '../../core/utils';
 import { Post } from '../../core/post';
 import * as moment from 'moment';
+
+import has = Reflect.has;
 export default class SpamDiscuz extends SpamNormal {
   private crawler: SiteCrawlerDiscuz;
   constructor(config: SiteConfig) {
     super(config);
     this.crawler = new SiteCrawlerDiscuz(config);
+  }
+
+  /**
+   * 检查表单有没有验证码
+   * @param $
+   */
+  async checkCaptcha(driver?: WebDriver) {
+    if (driver == null) driver = await this.crawler.getSelenium();
+    let checkEle = await driver.findElement(By.id('seccheck')).catch((e) => null);
+    if (checkEle != null) {
+      //验证码服务
+      // language=js
+      let hash = await driver.executeScript(`
+          return document.querySelector('input[name=seccodehash]').value
+      `);
+      await driver.findElement(By.id(`seccode${hash}`)).click();
+      //TODO 自动检测验证码
+    }
   }
 
   async createReply(tid) {
@@ -27,6 +47,7 @@ export default class SpamDiscuz extends SpamNormal {
 document.querySelector('#e_textarea').value=\`${repText}\`;
     `);
     //TODO 验证码
+
     // 回复
     await driver.findElement(By.id('postsubmit')).click();
     this.crawler.logger.info('回复帖子', tid, repText);
@@ -42,7 +63,8 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
         np.id = pid;
         np.url = `/thread-${pid}-${p._currentPage - 1}-1.html`;
         await this.crawler.fetchPost(np, { onlyMain: false });
-        p._replyList = p._replyList.concat(np._replyList);
+        // 旧的在前
+        p._replyList = np._replyList.concat(p._replyList);
       }
       return p;
     }
@@ -61,7 +83,20 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
       },
       cf,
     );
+    let sleepA = async () => {
+      let st = Math.ceil(cf.checkInterval * 1000 * _.random(0.8, 1.1, true));
+      let sts = moment.duration(st);
+      this.crawler.logger.info('等待', sts.toISOString());
+      await sleep(st);
+    };
     while (true) {
+      if (cf.sleepHourRange != null) {
+        let d = new Date().getHours();
+        if (d >= cf.sleepHourRange[0] && d <= cf.sleepHourRange[1]) {
+          await sleepA();
+          continue;
+        }
+      }
       let canReply = true;
       if (cf.maxContinuous > 0) {
         let post = await this.getLastReplys(tid);
@@ -87,10 +122,7 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
       if (canReply) {
         await this.createReply(tid);
       }
-      let st = Math.ceil(cf.checkInterval * 1000 * _.random(0.8, 1.1, true));
-      let sts = moment.duration(st);
-      this.crawler.logger.info('等待', sts.toISOString());
-      await sleep(st);
+      await sleepA();
     }
   }
 
