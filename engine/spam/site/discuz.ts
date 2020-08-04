@@ -1,7 +1,7 @@
 import SpamNormal, { ISpamActionConfig } from './normal';
 import { SiteCrawlerDiscuz } from '../../core/site';
 import { SiteConfig } from '../../core/config';
-import { addCookie, waitUntilLoad } from '../../core/utils';
+import { addCookie, getImageBase64, waitUntilLoad } from '../../core/utils';
 import { By, until, WebDriver } from 'selenium-webdriver';
 import _ = require('lodash');
 import { sleep } from '../../core/utils';
@@ -9,8 +9,10 @@ import { Post } from '../../core/post';
 import * as moment from 'moment';
 
 import has = Reflect.has;
+
 export default class SpamDiscuz extends SpamNormal {
   private crawler: SiteCrawlerDiscuz;
+
   constructor(config: SiteConfig) {
     super(config);
     this.crawler = new SiteCrawlerDiscuz(config);
@@ -27,9 +29,10 @@ export default class SpamDiscuz extends SpamNormal {
       //验证码服务
       // language=js
       let hash = await driver.executeScript(`
-          return document.querySelector('input[name=seccodehash]').value
-      `);
+              return document.querySelector('input[name=seccodehash]').value
+            `);
       await driver.findElement(By.id(`seccode${hash}`)).click();
+      // 获取验证码图片
       //TODO 自动检测验证码
     }
   }
@@ -74,6 +77,7 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
   async checkIn() {
     //https://bbs2.seikuu.com/plugin.php?id=dsu_paulsign:sign
   }
+
   // 水楼，一直不停的回复某个帖子，禁止三连
   async shuiLou(tid, cf?: ISpamActionConfig) {
     cf = _.merge(
@@ -132,5 +136,11 @@ document.querySelector('#e_textarea').value=\`${repText}\`;
    * @param cf
    */
   async shuiCategory(cateIds: Array<string>, cf?: ISpamActionConfig) {}
+
   async start(args: { cates: Array<any> }) {}
+
+  async tt() {
+    let driver = await this.crawler.getSelenium();
+    await getImageBase64(driver, '.hdc.cl img');
+  }
 }

@@ -1,4 +1,5 @@
 import { Builder, By, Key, until, WebDriver } from 'selenium-webdriver';
+
 export async function waitUntilLoad(driver) {
   await driver.wait(async () => {
     return (
@@ -27,4 +28,26 @@ export async function addCookie(driver: WebDriver, cs: string, mainUrl: string) 
     let ck = { name: cs2[0], value: cs2[1], domain: rootDomain, httpOnly: true };
     await driver.manage().addCookie(ck);
   }
+}
+
+export async function getImageBase64(driver: WebDriver, loc: string) {
+  //language=js
+  let res = await driver.executeAsyncScript(`
+  let callback = arguments[arguments.length - 1];
+  (function (url, cb) {
+  let xhr = new XMLHttpRequest();
+  xhr.onload = function() {
+    let reader = new FileReader();
+    reader.onloadend = function() {
+      cb(reader.result);
+    }
+    reader.readAsDataURL(xhr.response);
+  };
+  xhr.open('GET', url);
+  xhr.responseType = 'blob';
+  xhr.send();
+})(document.querySelector("${loc}").src,callback)
+`);
+  console.log(res);
+  return res;
 }

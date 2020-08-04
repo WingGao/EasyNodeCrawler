@@ -99,7 +99,7 @@ if (require.main === module) {
     let cnf = getConfig();
     let site = new SiteCrawlerDiscuz(cnf);
     let spam = new SpamDiscuz(cnf);
-    await spam.waitForUserAction('haha');
+    await spam.tt();
     if (_.size(yargs.argv._) == 0) {
       site.startWorker();
     } else {
