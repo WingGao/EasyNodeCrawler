@@ -8,6 +8,7 @@
 
 * engine  爬取引擎
 * -- core 通用爬取功能
+* chrome-task 一些Chrome操作的任务
 
 ## 环境安装
 

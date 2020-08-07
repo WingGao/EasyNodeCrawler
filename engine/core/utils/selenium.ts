@@ -48,6 +48,6 @@ export async function getImageBase64(driver: WebDriver, loc: string) {
   xhr.send();
 })(document.querySelector("${loc}").src,callback)
 `);
-  console.log(res);
+  // console.log(res);
   return res;
 }
