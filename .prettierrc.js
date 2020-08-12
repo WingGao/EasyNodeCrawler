@@ -1,3 +1,4 @@
+// {**/*,*}.{js,ts,jsx,tsx}
 module.exports = {
   // 行最大长度规则
   printWidth: 100,
