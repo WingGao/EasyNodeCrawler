@@ -33,9 +33,10 @@ describe('phpwind', () => {
   //测试回复
   test('回复', async () => {
     let p = new Post();
-    p.id = '907996';
+    p.id = '911529';
     p.categoryId = '128';
-    await site.createReply(p, '感谢分享');
+    // await site.createReply(p, '感谢分享');
+    await site.sendReply(p, '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ');
   });
 });
 describe('phpwind-测试Seikuu-列表', () => {

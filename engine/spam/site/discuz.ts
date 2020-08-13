@@ -11,11 +11,12 @@ import * as moment from 'moment';
 import has = Reflect.has;
 
 export default class SpamDiscuz extends SpamNormal {
-  private crawler: SiteCrawlerDiscuz;
+  crawler: SiteCrawlerDiscuz;
 
   constructor(config: SiteConfig) {
-    super(config);
-    this.crawler = new SiteCrawlerDiscuz(config);
+    let c = new SiteCrawlerDiscuz(config);
+    super(config, c);
+    this.crawler = c;
   }
 
   /**

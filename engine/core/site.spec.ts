@@ -6,5 +6,5 @@ test('site', () => {
   config.name = 'xk';
   config.host = 'bbs2.seikuu.com';
   config.https = true;
-  let crawler = new SiteCrawler(config);
+  // let crawler = new SiteCrawler(config);
 });

@@ -8,13 +8,13 @@ import _ = require('lodash');
 
 export class SpamRecord extends EsModel {
   site: string; //站点的host
-  id: string; //帖子id
+  pid: string; //帖子id
   categoryId: string;
   myLastReplyPos: number;
   myLastReplyPage: number;
 
   uniqId() {
-    return `${this.site}-${this.id}`;
+    return `${this.site}-${this.pid}`;
   }
 
   indexName() {
@@ -32,7 +32,7 @@ export class SpamRecord extends EsModel {
         mappings: {
           properties: {
             site: { type: 'keyword' },
-            id: { type: 'keyword' },
+            pid: { type: 'keyword' },
             categoryId: { type: 'keyword' },
             myLastReplyPos: { type: 'integer' },
             myLastReplyPage: { type: 'integer' },

@@ -10,9 +10,11 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
-import { addCookie } from '../utils';
+import { addCookie, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import Str = scalarOptions.Str;
+import { del } from 'selenium-webdriver/http';
+import * as moment from 'moment';
 
 export abstract class SiteCrawler {
   config: SiteConfig;
@@ -20,6 +22,7 @@ export abstract class SiteCrawler {
   queue: Queue;
   logger: Logger;
   private driver: WebDriver;
+  lastReplyTime: number = 0; //最后回复时间
 
   constructor(config: SiteConfig) {
     this.config = config;
@@ -73,6 +76,10 @@ export abstract class SiteCrawler {
     this.logger.debug('init', config.name);
   }
 
+  abstract async fetchPage(
+    pageUrl,
+    cateId,
+  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    */
@@ -222,8 +229,32 @@ export abstract class SiteCrawler {
   }
 
   abstract getPostUrl(pid): String;
+  abstract getPostListUrl(cateId, page): String;
 
-  abstract async createReply(post: Post, text: string);
+  abstract async sendReply(post: Post, text: string);
+  async sendReplyLimit(post: Post, text: string) {
+    let delay = new Date().getTime() - this.lastReplyTime;
+    delay = this.config.replyTimeSecond * 1000 - delay;
+    if (delay > 0) {
+      this.logger.info('等待回帖', post.id, moment.duration(delay).toISOString());
+      await sleep(delay);
+    }
+    await this.sendReply(post, text);
+    this.lastReplyTime = new Date().getTime();
+  }
+
+  async loopCategory(cateId, cb: (posts: Array<Post>) => Promise<boolean>) {
+    let pageG = 1;
+    for (let page = 1; page <= pageG; page++) {
+      let purl = this.getPostListUrl(cateId, page);
+      let { posts, $, pageMax } = await this.fetchPage(purl, cateId);
+      pageG = pageMax;
+      let ok = await cb(posts);
+      if (!ok) {
+        break;
+      }
+    }
+  }
 }
 
 export function createFromConfig(config: SiteConfig) {

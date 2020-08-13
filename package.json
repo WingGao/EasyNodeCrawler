@@ -15,6 +15,7 @@
     "bullmq": "^1.9.0",
     "cheerio": "^1.0.0-rc.3",
     "crawler": "^1.2.2",
+    "form-data": "^3.0.0",
     "iconv-lite": "^0.6.2",
     "lodash": "^4.17.19",
     "log4js": "^6.3.0",

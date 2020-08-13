@@ -7,6 +7,7 @@ import { Post } from '../post';
 import { getInt, sleep, toZhSimple, waitUntilLoad } from '../utils';
 import Redis from '../redis';
 import { By } from 'selenium-webdriver';
+import FormData = require('form-data');
 
 export class SiteCrawlerPhpwind extends SiteCrawler {
   async checkCookie() {
@@ -71,7 +72,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
       //没有权限
       return;
     }
-    let posts = [];
+    let posts = [] as Array<Post>;
     for (let tbody of $('#ajaxtable .tr3.t_one') as any) {
       let $tbody = $(tbody);
       let $tds = $tbody.find('td');
@@ -97,6 +98,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
         post.replyNum = parseInt(replyStr[0]);
         post.viewNum = parseInt(replyStr[1]);
         post.authorId = parseInt($tds.eq(2).find('a').attr('href').split('uid-')[1]).toString();
+        post._lastReplyUser = { uname: $tds.eq(4).find('span').text().split(':')[1].trim() };
         // 添加到队列
         posts.push(post);
       }
@@ -142,22 +144,6 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
       await this.fetchPages(cate.id);
     }
     this.logger.info('获取post链接完毕');
-  }
-
-  //将楼层转换为数字
-  parseInnerId(str: string) {
-    switch (str) {
-      case '楼主':
-        return 1;
-      case '沙发':
-        return 2;
-      case '板凳':
-        return 3;
-      case '地板':
-        return 4;
-      default:
-        return parseInt(str);
-    }
   }
   // 专门解析post
   async parsePost(post: Post, $, pcf) {
@@ -209,7 +195,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
         let createDate = $p.find(`#authorposton${pid}`).text().split('于')[1];
         reply.createTime = new Date(createDate);
         reply.updateTime = post.createTime;
-        reply._innerId = this.parseInnerId($p.find(`#postnum${pid}`).text().trim());
+        // reply._innerId = this.parseInnerId($p.find(`#postnum${pid}`).text().trim());
         // 正文
         let $body = $(`#postmessage_${pid}`);
         reply.body = $body.text().trim();
@@ -240,24 +226,47 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     return post;
   }
 
-  async createReply(post: Post, text: string): Promise<any> {
-    await this.checkCookie();
-    let driver = await this.getSelenium();
-    await sleep(60000);
-    await driver.get(this.config.fullUrl(`/profile.php`));
-    return;
-    await driver.get(
-      this.config.fullUrl(`/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`),
+  async getFormData($form) {
+    let data = new FormData();
+    $form.find('input').each((i, ipt) => {
+      let ttype = ipt.attribs.type;
+      if (ttype == 'submit' || ttype == 'checkbox' || ipt.attribs.disabled != null) {
+        return;
+      } else {
+        let name = ipt.attribs.name;
+        let value = ipt.attribs.value;
+        data.append(name, value);
+      }
+    });
+    return data;
+  }
+  async sendReply(post: Post, text: string): Promise<any> {
+    this.logger.info('准备回复', post.url, text);
+    let purl = this.config.fullUrl(
+      `/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`,
     );
-    await waitUntilLoad(driver);
-    let textDom = await driver.findElement(By.id('textarea'));
-    await textDom.sendKeys(text);
-    let submit = await driver.findElement(By.css('input[type=submit]'));
-    await submit.click();
-    await waitUntilLoad(driver);
+    let rep = await this.axiosInst.get(purl);
+    let $ = cheerio.load(rep.data);
+    let $form = $(`form`).filter((i, el) => {
+      return el.attribs.action.indexOf('post.php') >= 0;
+    });
+    let formData = await this.getFormData($form);
+    formData.append('atc_content', text);
+    let res = await this.axiosInst.post(this.config.fullUrl(`/post.php`), formData, {
+      headers: formData.getHeaders(),
+    });
+    $ = cheerio.load(res.data);
+    let msg = $('center').text();
+    this.logger.info('回复结束', post.id, msg);
+    if (msg.indexOf('发帖完毕') > 0) return true;
+    throw new Error(msg);
   }
 
   getPostUrl(pid): String {
     return this.config.fullUrl(`/read.php?tid-${pid}.html`);
+  }
+
+  getPostListUrl(cateId, page): String {
+    return this.config.fullUrl(`/thread.php?fid=${cateId}&page=${page}`);
   }
 }

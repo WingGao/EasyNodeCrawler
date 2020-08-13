@@ -239,4 +239,16 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     post._replyList = replyList;
     return post;
   }
+
+  async sendReply(post: Post, text: string): Promise<any> {
+    return Promise.resolve(undefined);
+  }
+
+  getPostUrl(pid): String {
+    return '';
+  }
+
+  getPostListUrl(cateId, page): String {
+    return '';
+  }
 }

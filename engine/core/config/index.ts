@@ -31,6 +31,9 @@ export class SiteConfig {
   myUsername?: string; //我的用户名，区分用户
   myUserId?: string;
   selenium?: boolean = false;
+  replyPageSize: number = 10; //每个帖子下面的回复分页大小
+  replyTimeSecond: number = 3 * 60; //帖子回复间隔，秒
+  replyMaxPerPage: number = 5; //每页回复的帖子个数，防止屠版
 
   constructor(props?: Partial<SiteConfig>) {
     _.merge(this, props);

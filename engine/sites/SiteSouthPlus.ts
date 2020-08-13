@@ -9,6 +9,7 @@ import cookies from './cookie';
 import * as yargs from 'yargs';
 import SpamDiscuz from '../spam/site/discuz';
 import _ = require('lodash');
+import SpamNormal from '../spam/site/normal';
 
 export default function getConfig() {
   let sc = new SiteConfig();
@@ -18,9 +19,11 @@ export default function getConfig() {
   sc.siteType = SiteType.Phpwind; // Pu!mdHd v0.7β
   sc.toZh = true;
   sc.saveBody = 2;
-  sc.myUsername = 'shaziniu';
+  sc.myUsername = 'f33fb3e5';
   sc.myUserId = '1191215';
   sc.cookie = cookies[sc.host].cookie;
+  sc.replyPageSize = 30;
+  sc.replyMaxPerPage = 8;
   sc.getHeaders = () => {
     return {
       cookie: sc.cookie,
@@ -114,14 +117,28 @@ if (require.main === module) {
     await initConfig('config/dev.yaml');
     let cnf = getConfig();
     let site = new SiteCrawlerPhpwind(cnf);
-    let spam = new SpamDiscuz(cnf);
-    await spam.tt();
+    let spam = new SpamNormal(cnf, site);
+    // await spam.tt();
     if (_.size(yargs.argv._) == 0) {
       site.startWorker();
     } else {
       switch (yargs.argv._[0]) {
         case 'shui':
-          await spam.shuiLou('243457', { checkInterval: 5 * 60, sleepHourRange: [1, 7] }); //人少
+          //同人音声
+          await spam.shuiTask([
+            () =>
+              spam.shuiCagegory('128', {
+                onReply: async (p) => {
+                  return '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ';
+                },
+              }),
+            () =>
+              spam.shuiCagegory('48', {
+                onReply: async () => '玛珂一个 [s:692] 菠萝',
+                checkPost: (p: Post) => p.replyNum > 10,
+              }),
+          ]);
+
           break;
       }
     }
