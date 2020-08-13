@@ -2,7 +2,9 @@ es:
   node: 'http://localhost:9200'
 
 redis:
-  host: 172.29.84.191
+  host: 172.17.17.191
   port: 6379
 
 wgwHost: 'http://127.0.0.1:7112'
+
+userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:78.0) Gecko/20100101 Firefox/78.0'

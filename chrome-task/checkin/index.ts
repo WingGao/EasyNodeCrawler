@@ -12,11 +12,13 @@ export async function siteLeaguehdCom(chrome: WebDriver) {
   await siteNexusPHP(chrome, `https://leaguehd.com/userdetails.php?id=26801`, {});
 }
 export async function siteSoulvoice(chrome: WebDriver) {
-  await siteNexusPHP(chrome, `https://pt.soulvoice.club/userdetails.php?id=96892`, {});
+  await siteNexusPHP(chrome, `https://pt.soulvoice.club/userdetails.php?id=96892`, {
+    signDom: '.faqlink',
+  });
 }
 export async function sitePterclub(chrome: WebDriver) {
   await siteNexusPHP(chrome, `https://pterclub.com/userdetails.php?id=10421`, {
-    signDom: '#attendance-wrap',
+    signDom: '#do-attendance',
     isSignDone: async () => {
       await chrome.wait(until.elementLocated(By.css('.jconfirm-title')));
     },
@@ -40,6 +42,7 @@ export async function siteNexusPHP(chrome: WebDriver, homeUrl, conf: INexusPHPCo
   );
   const siteName = homeUrl;
   await chrome.get(homeUrl);
+  await waitUntilLoad(chrome);
   await chrome.wait(until.elementLocated(By.id('info_block')));
   let signEle = await chrome.findElement(By.css(conf.signDom)).catch((e) => null);
   if (signEle == null) {
@@ -58,8 +61,8 @@ export async function siteNexusPHP(chrome: WebDriver, homeUrl, conf: INexusPHPCo
 if (require.main == module) {
   (async () => {
     let chrome = await getChrome();
-    await siteLeaguehdCom(chrome);
-    await sitePterclub(chrome);
+    // await siteLeaguehdCom(chrome);
+    // await sitePterclub(chrome);
     await siteSoulvoice(chrome);
   })();
 }

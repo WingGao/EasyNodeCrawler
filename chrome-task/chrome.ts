@@ -1,7 +1,6 @@
 import { Builder, WebDriver } from 'selenium-webdriver';
 import { Options, Driver } from 'selenium-webdriver/chrome';
-import { addCookie } from '../engine/core/utils';
-import path = require('path');
+import { addCookie, sleep } from '../engine/core/utils';
 
 let chrome: WebDriver;
 export async function getChrome() {
@@ -16,5 +15,6 @@ export async function getChrome() {
   } else {
     throw new Error('不支持的平台');
   }
+  await sleep(3000);
   return chrome;
 }

@@ -4,19 +4,15 @@ import * as iconv from 'iconv-lite';
 import cheerio = require('cheerio');
 import _ = require('lodash');
 import { Post } from '../post';
-import { getInt, toZhSimple } from '../utils';
+import { getInt, sleep, toZhSimple, waitUntilLoad } from '../utils';
 import Redis from '../redis';
+import { By } from 'selenium-webdriver';
 
-export class SiteCrawlerDiscuz extends SiteCrawler {
-  // Discuz! X3.4
+export class SiteCrawlerPhpwind extends SiteCrawler {
   async checkCookie() {
-    let rep = await axios.get(this.config.fullUrl('/home.php'), {
-      headers: this.config.getHeaders(),
-      responseType: 'arraybuffer',
-    });
-    let data = iconv.decode(rep.data, 'gbk');
-    let uid = /uid=(\d+)/.exec(data);
-    if (uid && uid.length > 1) {
+    let rep = await this.axiosInst.get(this.config.fullUrl('/profile.php'));
+    let uid = /uid-(\d+)/.exec(rep.data);
+    if (uid && uid[1] == this.config.myUserId) {
       return true;
     } else {
       throw new Error('cookie失效');
@@ -27,33 +23,29 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
    * 获取板块
    */
   async listCategory() {
-    // 通过我的权限来获取大概
-    let rep = await this.axiosInst.get(
-      this.config.fullUrl('/home.php?mod=spacecp&ac=usergroup&do=forum'),
-    );
+    // 通过wap页面来解析
+    let rep = await this.axiosInst.get(this.config.fullUrl('/index.php'));
     let $ = cheerio.load(rep.data);
-    let table = $('table');
     let blocks = [];
-    table.find('tr').each((tri, tr) => {
-      if (tri == 0) return; //跳过表头
-      let $tr = $(tr);
-      let $name = $tr.find('th');
-      let href = $name.find('a').attr('href');
-      let block = {
-        id: null,
-        name: $name.text(),
-        canShow:
-          _.defaultTo($($tr.find('td').get(0)).find('img').attr('alt'), '').indexOf('invalid') < 0,
-      };
-      let ids = /forum-(\d+)-(\d+)/.exec(href);
-      let nameStyle = _.defaultTo($name.attr('style'), '');
-      if (nameStyle.indexOf('padding-left') >= 0) {
-        block.id = ids[1];
-        blocks.push(block);
+    $('tr.tr3.f_one').each((tri, tr) => {
+      let id = tr.attribs.id;
+      if (id && id.indexOf('fid_') >= 0) {
+        let $tr = $(tr);
+        let $th = $tr.find('th').eq(0);
+        $th.find('a').each((ai, a) => {
+          let $a = $(a);
+          let href = a.attribs.href;
+          if (href && href.indexOf('fid-') > 0) {
+            let cate = {} as any;
+            cate.id = /fid-(\d+)/.exec(href)[1];
+            cate.name = $a.text();
+            blocks.push(cate);
+          }
+        });
       }
-      // debugger;
     });
     console.log(JSON.stringify(blocks));
+    return blocks;
   }
 
   checkPermission($) {
@@ -71,7 +63,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     }
   }
 
-  async fetchPage(pageUrl) {
+  async fetchPage(pageUrl, cateId) {
     this.logger.info('获取', pageUrl);
     let rep = await this.axiosInst.get(pageUrl);
     let $ = cheerio.load(rep.data);
@@ -80,32 +72,40 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       return;
     }
     let posts = [];
-    for (let tbody of $('#threadlist #threadlisttableid tbody') as any) {
+    for (let tbody of $('#ajaxtable .tr3.t_one') as any) {
       let $tbody = $(tbody);
+      let $tds = $tbody.find('td');
       // 排除置顶的
-      let attId = $tbody.attr('id');
+      let $ta = $tds.eq(1).find('h3 a');
       let post = this.createPost();
-      if (attId.indexOf('normalthread') >= 0) {
-        post.id = getInt(attId).toString();
-        post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
-        post.viewNum = parseInt($tbody.find('.num>em').text());
-        post.replyNum = parseInt($tbody.find('.num>a').text());
-        let $th = $tbody.find('th');
-        post.canReply = $th.attr('class').indexOf('lock') < 0;
-        post._lastReplyUser = $tbody.find('.by cite').text().trim();
+      post.canReply = true;
+      post.categoryId = cateId;
+      let isGlobalTop = false; //是否是全局置顶
+      $tbody.find('img').each((i, img) => {
+        if (img.attribs.src.indexOf('headtopic_3.gif') > 0) {
+          isGlobalTop = true;
+        } else if (img.attribs.src.indexOf('topiclock.gif') > 0) {
+          post.canReply = false;
+        }
+      });
+
+      if (!isGlobalTop && $ta.length > 0) {
+        post.id = getInt($ta.attr('id')).toString();
+        post.url = `/read.php?tid-${post.id}.html`;
+        post.title = $ta.text().trim();
+        let replyStr = $tds.eq(3).text().split('/');
+        post.replyNum = parseInt(replyStr[0]);
+        post.viewNum = parseInt(replyStr[1]);
+        post.authorId = parseInt($tds.eq(2).find('a').attr('href').split('uid-')[1]).toString();
         // 添加到队列
         posts.push(post);
       }
     }
     // 获取max
     let pageMax = 1;
-    let spanT = $('#fd_page_top label span').text();
-    if (spanT.length == 0 && posts.length > 0) {
-      pageMax = 1;
-    } else {
-      let pageG = /(\d+)/.exec(spanT);
-      pageMax = parseInt(pageG[1]);
-    }
+    let spanT = $('.pagesone').eq(0).text();
+    let pageG = /(\d+)/.exec(spanT.split('/')[1]);
+    pageMax = parseInt(pageG[1]);
     return { posts, $, pageMax };
   }
 
@@ -116,7 +116,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       let listUrl = this.config.fullUrl(
         `/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`,
       );
-      let res = await this.fetchPage(listUrl);
+      let res = await this.fetchPage(listUrl, cateId);
 
       if (res == null) {
         //没有权限
@@ -238,5 +238,26 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     post.encodeBody(this.config.saveBody);
     post._replyList = replyList;
     return post;
+  }
+
+  async createReply(post: Post, text: string): Promise<any> {
+    await this.checkCookie();
+    let driver = await this.getSelenium();
+    await sleep(60000);
+    await driver.get(this.config.fullUrl(`/profile.php`));
+    return;
+    await driver.get(
+      this.config.fullUrl(`/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`),
+    );
+    await waitUntilLoad(driver);
+    let textDom = await driver.findElement(By.id('textarea'));
+    await textDom.sendKeys(text);
+    let submit = await driver.findElement(By.css('input[type=submit]'));
+    await submit.click();
+    await waitUntilLoad(driver);
+  }
+
+  getPostUrl(pid): String {
+    return this.config.fullUrl(`/read.php?tid-${pid}.html`);
   }
 }

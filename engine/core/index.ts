@@ -7,6 +7,7 @@ import { Post } from './post';
 import Sites from '../sites';
 import * as _ from 'lodash';
 import { SiteCrawler, SiteCrawlerDiscuz } from './site';
+import { SpamRecord } from '../spam/model';
 
 async function main() {
   let argv = yargs
@@ -31,9 +32,6 @@ async function main() {
     case SiteType.Discuz:
       currentSite = new SiteCrawlerDiscuz(sc);
       break;
-    default:
-      currentSite = new SiteCrawler(sc);
-      break;
   }
   currentSite.start();
 }
@@ -54,6 +52,8 @@ export async function initConfig(configPath) {
     MainConfig.logger().info('创建索引', post.indexName());
     let rep = await post._createIndex();
   }
+  let spamRec = new SpamRecord();
+  await spamRec.ensureIndex();
   return config;
 }
 

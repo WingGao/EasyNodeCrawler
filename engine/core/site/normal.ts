@@ -11,8 +11,10 @@ import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
 import { addCookie } from '../utils';
+import { scalarOptions } from 'yaml';
+import Str = scalarOptions.Str;
 
-export class SiteCrawler {
+export abstract class SiteCrawler {
   config: SiteConfig;
   axiosInst: AxiosInstance;
   queue: Queue;
@@ -24,8 +26,7 @@ export class SiteCrawler {
     let axc: AxiosRequestConfig = {
       headers: _.merge(
         {
-          'user-agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36',
+          'user-agent': MainConfig.default().userAgent,
         },
         config.getHeaders(),
       ),
@@ -36,7 +37,7 @@ export class SiteCrawler {
             return iconv.decode(data, 'gbk');
           }
           // debugger;
-          return data;
+          return data.toString();
         },
       ],
     };
@@ -75,7 +76,8 @@ export class SiteCrawler {
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    */
-  async startFindLinks() {}
+  abstract async startFindLinks();
+
   /**
    * 开启爬取
    */
@@ -84,6 +86,7 @@ export class SiteCrawler {
     // Queue just one URL, with default callback
     c.queue(this.config.fullUrl('/'));
   }
+
   getCrawler() {
     const c = new Crawler(
       _.merge(
@@ -118,9 +121,7 @@ export class SiteCrawler {
     return c;
   }
 
-  async checkCookie(): Promise<any> {
-    throw new Error('未支持checkCookie');
-  }
+  abstract async checkCookie();
 
   _queueName() {
     return `node_crawler:queue:${this.config.host}`;
@@ -145,16 +146,16 @@ export class SiteCrawler {
       }, //默认重试
     });
   }
+
   // 专门解析post
-  async parsePost(post: Post, $, pcf?: any) {
-    return post;
-  }
+  abstract async parsePost(post: Post, $, pcf?: any);
 
   async fetchPost(post: Post, pcf?: any) {
     let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
     post = await this.parsePost(post, cheerio.load(rep.data), pcf);
     return post;
   }
+
   async fetchPostAndSave(post: Post) {
     // 先判断是否存在
     if ((await post.getById(post.uniqId())) != null) {
@@ -219,15 +220,15 @@ export class SiteCrawler {
     }
     return this.driver;
   }
+
+  abstract getPostUrl(pid): String;
+
+  abstract async createReply(post: Post, text: string);
 }
 
 export function createFromConfig(config: SiteConfig) {
   let sc: SiteCrawler;
   switch (config.siteType) {
-    case SiteType.Normal:
-    default:
-      sc = new SiteCrawler(config);
-      break;
   }
   return sc;
 }

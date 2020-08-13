@@ -52,6 +52,7 @@ interface IProxy {
 export enum SiteType {
   Normal,
   Discuz, //discuz论坛
+  Phpwind,
 }
 
 /**
@@ -65,6 +66,8 @@ export class MainConfig {
     port: number;
   };
   wgwHost?: string = 'https://wgw.suamo.art';
+  userAgent: string =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:78.0) Gecko/20100101 Firefox/78.0';
 
   static default(c?: MainConfig) {
     if (c != null) {
