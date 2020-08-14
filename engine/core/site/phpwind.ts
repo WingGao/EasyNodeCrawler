@@ -50,28 +50,11 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
   }
 
   checkPermission($) {
-    let $alert = $('#messagetext');
-    if ($alert.length > 0) {
-      let msg = $alert.text().trim();
-      this.logger.error(msg);
-      if (/(权限)|(需要升级)/.test(msg)) {
-      } else {
-        throw new Error(msg);
-      }
-      return false;
-    } else {
-      return true;
-    }
+    //todo
+    return true;
   }
 
-  async fetchPage(pageUrl, cateId) {
-    this.logger.info('获取', pageUrl);
-    let rep = await this.axiosInst.get(pageUrl);
-    let $ = cheerio.load(rep.data);
-    if (!this.checkPermission($)) {
-      //没有权限
-      return;
-    }
+  async parsePage($, cateId) {
     let posts = [] as Array<Post>;
     for (let tbody of $('#ajaxtable .tr3.t_one') as any) {
       let $tbody = $(tbody);
@@ -115,9 +98,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     let pageMax = 1;
     for (let page = 1; page <= pageMax; page++) {
       // 按发帖时间
-      let listUrl = this.config.fullUrl(
-        `/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`,
-      );
+      let listUrl = this.config.fullUrl(`/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`);
       let res = await this.fetchPage(listUrl, cateId);
 
       if (res == null) {
@@ -157,63 +138,46 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
       },
       pcf,
     );
-    let found = false;
-    let $tds = $($('#postlist > table').get(0)).find('td');
-    post.site = this.config.host;
-    // 查看: 547|回复: 294
-    let sps = $($tds.get(0)).find('span');
-    let v1 = sps.get(1);
-    post.viewNum = parseInt($(v1).text());
-    post.replyNum = parseInt($(sps.get(4)).text());
-    post._currentPage = parseInt($('#pgt strong').text());
-    post.canReply = $('#post_reply').length > 0;
-    if (post.title == null) {
-      post.title = $('#thread_subject').text().trim();
-    }
-    if (post.categoryId == null) {
-      //获取目录
-      let as = $('#pt a');
-      let ca = as.get(as.length - 2);
-      let cah = ca.attribs.href;
-      if (cah.indexOf('forum') >= 0) {
-        post.categoryId = getInt(cah).toString();
-      } else {
-        throw new Error('未处理' + cah);
-      }
-    }
-    let replyList = [];
-    $('#postlist > div').each((pi, p) => {
-      if (found && pcf.onlyMain) return; //只处理楼主
-      let $p = $(p);
-      if ($p.attr('id').indexOf('post_') >= 0) {
-        let pid = getInt($p.attr('id'));
-        // 处理作者
-        let $author = $p.find('.favatar .authi a');
-        let reply = new Post();
-        reply.authorId = /uid=(\d+)/.exec($author.attr('href'))[1];
-        // 创建时间
-        let createDate = $p.find(`#authorposton${pid}`).text().split('于')[1];
-        reply.createTime = new Date(createDate);
-        reply.updateTime = post.createTime;
-        // reply._innerId = this.parseInnerId($p.find(`#postnum${pid}`).text().trim());
-        // 正文
-        let $body = $(`#postmessage_${pid}`);
-        reply.body = $body.text().trim();
-        reply.bodyBin = $body.html().trim();
+    let foundMain = false;
 
-        // 更新时间
-        $p.find('.pstatus').each((psi, ps) => {
-          let pst = $(ps).text();
-          if (pst.indexOf('本帖最后由') >= 0) {
-            let ud = /(\d{4}-\d+-\d+ \d+:\d+)/.exec(pst)[1];
-            reply.updateTime = new Date(ud);
-          }
-        });
-        found = true;
-        replyList.push(reply);
-      }
+    post.site = this.config.host;
+    // post.viewNum = parseInt($(v1).text());
+    // post.replyNum = parseInt($(sps.get(4)).text());
+    post._currentPage = parseInt($('.pages li b').text());
+    // if (post.title == null) {
+    //   post.title = $('#thread_subject').text().trim();
+    // }
+    // if (post.categoryId == null) {
+    //   //获取目录
+    //   let as = $('#pt a');
+    //   let ca = as.get(as.length - 2);
+    //   let cah = ca.attribs.href;
+    //   if (cah.indexOf('forum') >= 0) {
+    //     post.categoryId = getInt(cah).toString();
+    //   } else {
+    //     throw new Error('未处理' + cah);
+    //   }
+    // }
+    let replyList = [];
+    let $posts = $('div.t5.t2 > table');
+    $posts.each((pi, p) => {
+      if (foundMain && pcf.onlyMain) return; //只处理楼主
+      let $p = $(p);
+      let reply = new Post();
+
+      reply.authorId = /uid-(\d+)/.exec($p.find('.user-pic a').attr('href'))[1];
+      let $tit = $p.find('#td_tpc');
+      let createDate = $tit.find('span').eq(1).text();
+      reply.createTime = new Date(createDate);
+      reply.updateTime = reply.createTime;
+      let $body = $p.find('.tpc_content > div').filter((i, el) => el.attribs.id && el.attribs.id.indexOf('read') == 0);
+      if (!foundMain) foundMain = $body.attr('id') == 'read_tpc';
+      reply.bodyBin = $body.html().trim();
+      $body.find('br').replaceWith('\n');
+      reply.body = $body.text().trim();
+      replyList.push(reply);
     });
-    if (found) {
+    if (foundMain) {
       post = _.merge(post, replyList[0]);
     }
 
@@ -241,10 +205,8 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     return data;
   }
   async sendReply(post: Post, text: string): Promise<any> {
-    this.logger.info('准备回复', post.url, text);
-    let purl = this.config.fullUrl(
-      `/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`,
-    );
+    this.logger.info('准备回复', this.config.fullUrl(post.url), text);
+    let purl = this.config.fullUrl(`/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`);
     let rep = await this.axiosInst.get(purl);
     let $ = cheerio.load(rep.data);
     let $form = $(`form`).filter((i, el) => {
@@ -262,11 +224,11 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     throw new Error(msg);
   }
 
-  getPostUrl(pid): String {
-    return this.config.fullUrl(`/read.php?tid-${pid}.html`);
+  getPostUrl(pid, page = 1): string {
+    return this.config.fullUrl(`/read.php?tid-${pid}-page-${page}.html`);
   }
 
-  getPostListUrl(cateId, page): String {
+  getPostListUrl(cateId, page): string {
     return this.config.fullUrl(`/thread.php?fid=${cateId}&page=${page}`);
   }
 }

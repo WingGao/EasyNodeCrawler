@@ -102,6 +102,7 @@ export class Post {
   }
 
   encodeBody(sc: number) {
+    if (this.bodyBin == null) return;
     switch (sc) {
       case 1:
         break;
@@ -113,6 +114,7 @@ export class Post {
     }
   }
   decodeBodyBrotli() {
+    if (this.bodyBin == null) return;
     let b = Buffer.from(this.bodyBin, 'base64');
     return Buffer.from(brotli.decompress(b)).toString();
   }

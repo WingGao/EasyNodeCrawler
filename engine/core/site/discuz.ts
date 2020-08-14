@@ -28,9 +28,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
    */
   async listCategory() {
     // 通过我的权限来获取大概
-    let rep = await this.axiosInst.get(
-      this.config.fullUrl('/home.php?mod=spacecp&ac=usergroup&do=forum'),
-    );
+    let rep = await this.axiosInst.get(this.config.fullUrl('/home.php?mod=spacecp&ac=usergroup&do=forum'));
     let $ = cheerio.load(rep.data);
     let table = $('table');
     let blocks = [];
@@ -42,8 +40,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       let block = {
         id: null,
         name: $name.text(),
-        canShow:
-          _.defaultTo($($tr.find('td').get(0)).find('img').attr('alt'), '').indexOf('invalid') < 0,
+        canShow: _.defaultTo($($tr.find('td').get(0)).find('img').attr('alt'), '').indexOf('invalid') < 0,
       };
       let ids = /forum-(\d+)-(\d+)/.exec(href);
       let nameStyle = _.defaultTo($name.attr('style'), '');
@@ -71,14 +68,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     }
   }
 
-  async fetchPage(pageUrl) {
-    this.logger.info('获取', pageUrl);
-    let rep = await this.axiosInst.get(pageUrl);
-    let $ = cheerio.load(rep.data);
-    if (!this.checkPermission($)) {
-      //没有权限
-      return;
-    }
+  async parsePage($, cateId) {
     let posts = [];
     for (let tbody of $('#threadlist #threadlisttableid tbody') as any) {
       let $tbody = $(tbody);
@@ -113,9 +103,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let pageMax = 1;
     for (let page = 1; page <= pageMax; page++) {
       // 按发帖时间
-      let listUrl = this.config.fullUrl(
-        `/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`,
-      );
+      let listUrl = this.config.fullUrl(`/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`);
       let res = await this.fetchPage(listUrl);
 
       if (res == null) {
@@ -208,7 +196,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         // 创建时间
         let createDate = $p.find(`#authorposton${pid}`).text().split('于')[1];
         reply.createTime = new Date(createDate);
-        reply.updateTime = post.createTime;
+        reply.updateTime = reply.createTime;
         reply._innerId = this.parseInnerId($p.find(`#postnum${pid}`).text().trim());
         // 正文
         let $body = $(`#postmessage_${pid}`);
@@ -244,11 +232,11 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     return Promise.resolve(undefined);
   }
 
-  getPostUrl(pid): String {
+  getPostUrl(pid): string {
     return '';
   }
 
-  getPostListUrl(cateId, page): String {
+  getPostListUrl(cateId, page): string {
     return '';
   }
 }

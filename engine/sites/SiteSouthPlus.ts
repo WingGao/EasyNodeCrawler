@@ -10,6 +10,7 @@ import * as yargs from 'yargs';
 import SpamDiscuz from '../spam/site/discuz';
 import _ = require('lodash');
 import SpamNormal from '../spam/site/normal';
+import { sleep } from '../core/utils';
 
 export default function getConfig() {
   let sc = new SiteConfig();
@@ -23,7 +24,10 @@ export default function getConfig() {
   sc.myUserId = '1191215';
   sc.cookie = cookies[sc.host].cookie;
   sc.replyPageSize = 30;
-  sc.replyMaxPerPage = 8;
+  sc.myReplyMaxPerPage = 8;
+  sc.postBlacklist = [
+    '501667', //关于三次元儿童色情的再次警告和说明
+  ];
   sc.getHeaders = () => {
     return {
       cookie: sc.cookie,
@@ -124,14 +128,24 @@ if (require.main === module) {
     } else {
       switch (yargs.argv._[0]) {
         case 'shui':
-          //同人音声
           await spam.shuiTask([
+            //同人音声
             () =>
               spam.shuiCagegory('128', {
                 onReply: async (p) => {
                   return '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ';
                 },
               }),
+            //水楼
+            () =>
+              spam.shuiCagegory('9', {
+                checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
+                onReply: async (p: Post) => {
+                  let re = await spam.gerRandomReply(p, 2);
+                  return re == null ? null : re.body;
+                },
+              }),
+            // 求物，无sp
             () =>
               spam.shuiCagegory('48', {
                 onReply: async () => '玛珂一个 [s:692] 菠萝',

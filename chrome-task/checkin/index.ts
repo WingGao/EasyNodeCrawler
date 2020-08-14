@@ -61,8 +61,8 @@ export async function siteNexusPHP(chrome: WebDriver, homeUrl, conf: INexusPHPCo
 if (require.main == module) {
   (async () => {
     let chrome = await getChrome();
-    // await siteLeaguehdCom(chrome);
-    // await sitePterclub(chrome);
+    await siteLeaguehdCom(chrome);
+    await sitePterclub(chrome);
     await siteSoulvoice(chrome);
   })();
 }

@@ -37,6 +37,10 @@ export abstract class EsModel {
     }
   }
 
+  /**
+   * 全量更新
+   * @param upsert
+   */
   async save() {
     let body = _.pickBy(this, (v, k) => {
       return k.indexOf('_') != 0;
@@ -48,11 +52,12 @@ export abstract class EsModel {
     };
     // debugger;
     let res = await ESClient.inst()
-      .create(pa as any)
+      .index(pa as any)
       .catch((e) => {
         return e;
       });
-    if (res.statusCode == 201) {
+    MainConfig.logger().debug('ES', `[${pa.index}, ${pa.id}]`, res.body.result, res.statusCode);
+    if (res.statusCode == 201 || res.statusCode == 200) {
       return true;
     } else {
       switch (res.message) {

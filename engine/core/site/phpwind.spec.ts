@@ -39,35 +39,28 @@ describe('phpwind', () => {
     await site.sendReply(p, '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ');
   });
 });
-describe('phpwind-测试Seikuu-列表', () => {
+describe('phpwind-列表', () => {
   test('列表解析', async () => {
     let url = `https://south-plus.org/thread.php?fid=128&page=1`;
     let res = await site.fetchPage(url, null);
     expect(res.posts.length).toBeGreaterThan(30);
     expect(res.pageMax).toBeGreaterThan(200);
   });
-  test('列表解析-锁定', async () => {
-    let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&orderby=replies&orderby=replies&filter=reply&page=1`;
-    let res = await site.fetchPage(url, null);
-    expect(res.posts).toHaveLength(30);
-    let post = res.posts[0];
-    expect(post.canReply).toBeFalsy();
-  });
-  test('123', async () => {
-    const notifier = require('node-notifier');
-    notifier.notify('Message');
-  });
 });
 
-describe('discuz-测试Seikuu-文章', () => {
+describe('phpwind-文章', () => {
   test('文章解析', async () => {
     let post = new Post();
     post.site = site.config.host;
-    post.id = '243457';
-    post.url = '/forum.php?mod=viewthread&tid=243457';
-    await site.fetchPost(post);
-    expect(post.replyNum).toBeGreaterThan(1);
-    expect(post.canReply).toBeTruthy();
+    post.id = '913473';
+    post.url = site.getPostUrl(post.id);
+    await site.fetchPost(post, { onlyMain: false });
+    expect(post.body.length).toBeGreaterThan(1);
+    expect(post._replyList.length).toBeGreaterThan(1);
+    post.body = null;
+    post.url = site.getPostUrl(post.id, 2);
+    await site.fetchPost(post, { onlyMain: false });
+    expect(post.body).toBeNull();
   });
 
   test('文章解析-空内容', async () => {

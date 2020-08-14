@@ -33,13 +33,15 @@ export class SiteConfig {
   selenium?: boolean = false;
   replyPageSize: number = 10; //每个帖子下面的回复分页大小
   replyTimeSecond: number = 3 * 60; //帖子回复间隔，秒
-  replyMaxPerPage: number = 5; //每页回复的帖子个数，防止屠版
+  myReplyMaxPerPage: number = 5; //每页回复的帖子个数，防止屠版
+  postBlacklist: Array<string> = []; //帖子黑名单，不处理
 
   constructor(props?: Partial<SiteConfig>) {
     _.merge(this, props);
   }
 
   fullUrl(p) {
+    if (p.indexOf('http') == 0) return p;
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
 }
@@ -69,8 +71,7 @@ export class MainConfig {
     port: number;
   };
   wgwHost?: string = 'https://wgw.suamo.art';
-  userAgent: string =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:78.0) Gecko/20100101 Firefox/78.0';
+  userAgent: string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:78.0) Gecko/20100101 Firefox/78.0';
 
   static default(c?: MainConfig) {
     if (c != null) {

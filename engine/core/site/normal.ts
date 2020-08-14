@@ -76,10 +76,22 @@ export abstract class SiteCrawler {
     this.logger.debug('init', config.name);
   }
 
-  abstract async fetchPage(
-    pageUrl,
-    cateId,
-  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
+  abstract checkPermission($): boolean;
+
+  async fetchPage(pageUrl, cateId?): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
+    this.logger.info('获取', pageUrl);
+    let rep = await this.axiosInst.get(pageUrl);
+    let $ = cheerio.load(rep.data);
+    if (!this.checkPermission($)) {
+      //没有权限
+      return;
+    }
+    let res = await this.parsePage($, cateId);
+    // 排除黑名单
+    res.posts = _.filter(res.posts, (v) => this.config.postBlacklist.indexOf(v.id) < 0);
+    return res;
+  }
+  abstract parsePage($: CheerioStatic, cateId?): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    */
@@ -228,8 +240,8 @@ export abstract class SiteCrawler {
     return this.driver;
   }
 
-  abstract getPostUrl(pid): String;
-  abstract getPostListUrl(cateId, page): String;
+  abstract getPostUrl(pid, page?: number): string;
+  abstract getPostListUrl(cateId, page): string;
 
   abstract async sendReply(post: Post, text: string);
   async sendReplyLimit(post: Post, text: string) {

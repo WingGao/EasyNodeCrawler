@@ -60,10 +60,9 @@ export default class SpamNormal {
     );
     let replyed = false;
     await this.crawler.loopCategory(cateId, async (posts) => {
-      let myReplyNum = _.filter(posts, (p) => p._lastReplyUser.uname == this.config.myUsername)
-        .length;
+      let myReplyNum = _.filter(posts, (p) => p._lastReplyUser.uname == this.config.myUsername).length;
       this.crawler.logger.debug('该页回复检测到', myReplyNum);
-      if (myReplyNum >= this.config.replyPageSize) {
+      if (myReplyNum >= this.config.myReplyMaxPerPage) {
         this.crawler.logger.info('触发防止屠版');
         return false; //防止屠版
       }
@@ -86,6 +85,7 @@ export default class SpamNormal {
         }
         // 创建回复
         let txt = await cnf.onReply(post);
+        if (txt == null) continue;
         await this.crawler.sendReplyLimit(post, txt);
         record.myLastReplyPage = Math.ceil((post.replyNum + 1) / this.config.replyPageSize);
         await record.save();
@@ -98,17 +98,38 @@ export default class SpamNormal {
     // await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
   }
 
+  // 获取非楼主的随机回复
+  async gerRandomReply(post: Post, page: number) {
+    let purl = this.crawler.getPostUrl(post.id, page);
+    let np = _.cloneDeep(post);
+    np.url = purl;
+    let res = await this.crawler.fetchPost(np, { onlyMain: false });
+    // 非楼主回复
+    let replys = _.filter(
+      res._replyList,
+      (v) => v.authorId != post.authorId && v.body.length <= 20 && v.body.length > 4,
+    );
+    if (replys.length == 0) return null;
+    return replys[_.random(0, replys.length - 1, false)];
+  }
+
   // 把所有发帖的操作都放到一起
   async shuiTask(ps: Array<() => Promise<boolean>>) {
     while (true) {
-      await runSafe(async () => {
-        for (let p of ps) {
-          let ok = await p();
-          if (ok) {
-            break;
+      await runSafe(
+        async () => {
+          for (let p of ps) {
+            let ok = await p();
+            if (ok) {
+              break;
+            }
           }
-        }
-      });
+        },
+        (e) => {
+          throw e;
+          return false;
+        },
+      );
       await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
     }
   }
