@@ -146,11 +146,11 @@ if (require.main === module) {
                 },
               }),
             // 求物，无sp
-            () =>
-              spam.shuiCagegory('48', {
-                onReply: async () => '玛珂一个 [s:692] 菠萝',
-                checkPost: (p: Post) => p.replyNum > 10,
-              }),
+            // () =>
+            //   spam.shuiCagegory('48', {
+            //     onReply: async () => '玛珂一个 [s:692] 菠萝',
+            //     checkPost: (p: Post) => p.replyNum > 10,
+            //   }),
           ]);
 
           break;

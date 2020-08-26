@@ -12,8 +12,6 @@ import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
 import { addCookie, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
-import Str = scalarOptions.Str;
-import { del } from 'selenium-webdriver/http';
 import * as moment from 'moment';
 
 export abstract class SiteCrawler {
@@ -30,6 +28,7 @@ export abstract class SiteCrawler {
       headers: _.merge(
         {
           'user-agent': MainConfig.default().userAgent,
+          cookie: config.cookie,
         },
         config.getHeaders(),
       ),
@@ -241,7 +240,7 @@ export abstract class SiteCrawler {
   }
 
   abstract getPostUrl(pid, page?: number): string;
-  abstract getPostListUrl(cateId, page): string;
+  abstract getPostListUrl(cateId, page?: number, ext?: string): string;
 
   abstract async sendReply(post: Post, text: string);
   async sendReplyLimit(post: Post, text: string) {
@@ -255,10 +254,10 @@ export abstract class SiteCrawler {
     this.lastReplyTime = new Date().getTime();
   }
 
-  async loopCategory(cateId, cb: (posts: Array<Post>) => Promise<boolean>) {
+  async loopCategory(cateId, cb: (posts: Array<Post>) => Promise<boolean>, cnf: { pageUrlExt?: string } = {}) {
     let pageG = 1;
     for (let page = 1; page <= pageG; page++) {
-      let purl = this.getPostListUrl(cateId, page);
+      let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
       let { posts, $, pageMax } = await this.fetchPage(purl, cateId);
       pageG = pageMax;
       let ok = await cb(posts);
@@ -266,6 +265,11 @@ export abstract class SiteCrawler {
         break;
       }
     }
+  }
+
+  //签到
+  async checkin(): Promise<boolean> {
+    return false;
   }
 }
 

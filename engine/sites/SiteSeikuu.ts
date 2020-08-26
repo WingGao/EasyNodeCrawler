@@ -98,17 +98,17 @@ if (require.main === module) {
     await initConfig('config/dev.yaml');
     let cnf = getConfig();
     let site = new SiteCrawlerDiscuz(cnf);
-    let spam = new SpamDiscuz(cnf);
-    await spam.tt();
-    if (_.size(yargs.argv._) == 0) {
-      site.startWorker();
-    } else {
-      switch (yargs.argv._[0]) {
-        case 'shui':
-          await spam.shuiLou('243457', { checkInterval: 5 * 60, sleepHourRange: [1, 7] }); //人少
-          break;
-      }
-    }
+    // let spam = new SpamDiscuz(cnf);
+    // await spam.tt();
+    // if (_.size(yargs.argv._) == 0) {
+    //   site.startWorker();
+    // } else {
+    //   switch (yargs.argv._[0]) {
+    //     case 'shui':
+    //       await spam.shuiLou('243457', { checkInterval: 5 * 60, sleepHourRange: [1, 7] }); //人少
+    //       break;
+    //   }
+    // }
 
     // await site.checkCookie();
     // await site.listCategory();

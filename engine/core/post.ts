@@ -3,7 +3,7 @@
  */
 import ESClient from './es';
 import { MainConfig } from './config';
-import brotli = require('brotli');
+// import brotli = require('brotli');
 import _ = require('lodash');
 
 export class Post {
@@ -22,10 +22,11 @@ export class Post {
   replyNum: number; //回复数
   canReply: boolean; //能否回复
   // _开头的都是不保存的属性
-  _lastReplyUser: any;
+  _lastReplyUser?: { uname: string };
   _replyList: Array<Post>; //回复列表
   _innerId: number; //楼层号
   _currentPage: number; //所在页码
+  _html?: string;
   uniqId() {
     return `${this.site}-${this.id}`;
   }
@@ -107,7 +108,7 @@ export class Post {
       case 1:
         break;
       case 2:
-        this.bodyBin = Buffer.from(brotli.compress(Buffer.from(this.bodyBin))).toString('base64');
+        // this.bodyBin = Buffer.from(brotli.compress(Buffer.from(this.bodyBin))).toString('base64');
         break;
       default:
         this.bodyBin = null;
@@ -115,7 +116,7 @@ export class Post {
   }
   decodeBodyBrotli() {
     if (this.bodyBin == null) return;
-    let b = Buffer.from(this.bodyBin, 'base64');
-    return Buffer.from(brotli.decompress(b)).toString();
+    // let b = Buffer.from(this.bodyBin, 'base64');
+    // return Buffer.from(brotli.decompress(b)).toString();
   }
 }

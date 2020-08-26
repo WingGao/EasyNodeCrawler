@@ -1,5 +1,7 @@
 import { OpenCC } from 'opencc';
 import _ = require('lodash');
+import * as iconv from 'iconv-lite';
+
 const converter: OpenCC = new OpenCC('t2s.json'); //繁体转简体
 export function getInt(s: string) {
   let g = /(\d+)/.exec(s);

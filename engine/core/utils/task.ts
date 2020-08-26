@@ -1,13 +1,19 @@
-export async function runSafe(act: () => Promise<any>, onError: (Error) => boolean) {
+let ignoreErrors = [
+  'socket hang up',
+  'Client network socket disconnected before secure TLS connection was established',
+];
+export async function runSafe(act: () => Promise<any>, onError: (Error) => Promise<boolean>) {
   while (true) {
     let ok = true;
-    await act().catch((e: Error) => {
-      if (e.message.indexOf('socket hang up') >= 0) {
+    try {
+      await act();
+    } catch (e) {
+      if (ignoreErrors.find((v) => e.message.indexOf(v) >= 0) != null) {
         ok = false;
       } else {
-        ok = onError(e);
+        ok = await onError(e);
       }
-    });
+    }
     if (ok) break;
   }
 }

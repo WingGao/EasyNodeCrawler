@@ -1,4 +1,4 @@
-import { SiteConfig } from '../../core/config';
+import { LimitConfig, MainConfig, SiteConfig } from '../../core/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import _ = require('lodash');
@@ -7,6 +7,8 @@ import { SiteCrawler } from '../../core/site';
 import { SpamRecord } from '../model';
 import { Post } from '../../core/post';
 import { runSafe, sleep } from '../../core/utils';
+import Redis from '../../core/redis';
+import moment = require('moment');
 
 let haoList = null;
 export default class SpamNormal {
@@ -47,11 +49,13 @@ export default class SpamNormal {
   async shuiCagegory(
     cateId,
     cnf: {
-      onReply: (Post) => Promise<string>;
+      onReply: (Post) => Promise<any>;
       samePostReplyPage?: number;
       checkPost?: (Post) => boolean; //判断post是否符合标准
+      beforeSave?: (SpamRecord) => boolean;
+      pageUrlExt?: string;
     },
-  ) {
+  ): Promise<boolean> {
     cnf = _.merge(
       {
         samePostReplyPage: 1, //同一个帖子，自己重复会的间隔页数，1就是每个一页有一个回复
@@ -59,41 +63,56 @@ export default class SpamNormal {
       cnf,
     );
     let replyed = false;
-    await this.crawler.loopCategory(cateId, async (posts) => {
-      let myReplyNum = _.filter(posts, (p) => p._lastReplyUser.uname == this.config.myUsername).length;
-      this.crawler.logger.debug('该页回复检测到', myReplyNum);
-      if (myReplyNum >= this.config.myReplyMaxPerPage) {
-        this.crawler.logger.info('触发防止屠版');
-        return false; //防止屠版
-      }
-      for (let post of posts) {
-        if (cnf.checkPost && !cnf.checkPost(post)) continue;
-        let record = new SpamRecord();
-        record.site = post.site;
-        record.pid = post.id;
-        record.categoryId = cateId;
-        let old = await record.getById(record.uniqId());
-        if (old == null) {
-        } else {
-          //判断是否在一页上
-          let lastPage = Math.ceil(post.replyNum / this.config.replyPageSize);
-          if (lastPage - old.myLastReplyPage >= cnf.samePostReplyPage) {
-            //距离够了
-          } else {
-            continue; //跳过
-          }
+    await this.crawler.loopCategory(
+      cateId,
+      async (posts) => {
+        let myReplyNum = _.filter(posts, (p) => p._lastReplyUser.uname == this.config.myUsername).length;
+        this.crawler.logger.debug('该页回复检测到', myReplyNum);
+        if (myReplyNum >= this.config.myReplyMaxPerPage) {
+          this.crawler.logger.info('触发防止屠版');
+          return false; //防止屠版
         }
-        // 创建回复
-        let txt = await cnf.onReply(post);
-        if (txt == null) continue;
-        await this.crawler.sendReplyLimit(post, txt);
-        record.myLastReplyPage = Math.ceil((post.replyNum + 1) / this.config.replyPageSize);
-        await record.save();
-        replyed = true;
-        return false;
-      }
-      return true;
-    });
+        for (let post of posts) {
+          if (cnf.checkPost && !cnf.checkPost(post)) continue;
+          let record = new SpamRecord();
+          record.site = post.site;
+          record.pid = post.id;
+          record.categoryId = cateId;
+          let old = await record.getById(record.uniqId());
+          if (old == null) {
+          } else {
+            //判断是否在一页上
+            let lastPage = Math.ceil(post.replyNum / this.config.replyPageSize);
+            if (lastPage - old.myLastReplyPage >= cnf.samePostReplyPage) {
+              //距离够了
+            } else {
+              continue; //跳过
+            }
+          }
+          // 创建回复
+          let txt = await cnf.onReply(post);
+          if (txt == null) continue;
+          if (_.isString(txt)) {
+            //只有string才发送
+            await this.crawler.sendReplyLimit(post, txt);
+          }
+          record.myLastReplyPage = Math.ceil((post.replyNum + 1) / this.config.replyPageSize);
+          if (cnf.beforeSave) {
+            if (await cnf.beforeSave(record)) {
+              await record.save();
+            }
+          } else {
+            await record.save();
+          }
+          replyed = true;
+          return false;
+        }
+        return true;
+      },
+      {
+        pageUrlExt: cnf.pageUrlExt,
+      },
+    );
     return replyed;
     // await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
   }
@@ -125,12 +144,67 @@ export default class SpamNormal {
             }
           }
         },
-        (e) => {
-          throw e;
+        async (e) => {
+          this.crawler.logger.error(e);
+          await sleep(60000);
           return false;
         },
       );
       await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
+    }
+  }
+
+  async isLimited(limitKey: keyof LimitConfig): Promise<boolean> {
+    let maxVal = this.config.limit[limitKey];
+    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.host}:todayLimit:${limitKey}`;
+    if (maxVal == 0) return true;
+    else if (maxVal > 0) {
+      let currentVal = await Redis.inst().get(redisKey);
+      if (currentVal == null) return false;
+      return parseInt(currentVal) >= maxVal;
+    } else {
+      return false;
+    }
+  }
+
+  async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
+    let maxVal = this.config.limit[limitKey];
+    let currentVal = 0;
+    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.host}:todayLimit:${limitKey}`;
+    if (maxVal == 0) {
+      //不允许
+      this.crawler.logger.info('doWithLimit 不允许', limitKey, maxVal);
+      return false;
+    } else if (maxVal > 0) {
+      //一般都是24小时内
+      currentVal = await Redis.inst().incr(redisKey);
+      if (currentVal == 1) {
+        //设置过期
+        let exp = moment().endOf('day').diff(moment());
+        await Redis.inst().expire(redisKey, Math.ceil(exp / 1000 + 60));
+      }
+      if (currentVal > maxVal) {
+        this.crawler.logger.info('doWithLimit 到达上限', limitKey, maxVal);
+        return false;
+      } else {
+        this.crawler.logger.info(`doWithLimit ${limitKey} ${currentVal}/${maxVal}`);
+      }
+    }
+    let dec = async () => {
+      if (maxVal > 0) {
+        //失败了就复原
+        await Redis.inst().decr(redisKey);
+      }
+    };
+    try {
+      let res = await action();
+      if (!res) {
+        await dec();
+      }
+      return res;
+    } catch (e) {
+      await dec();
+      throw e;
     }
   }
 

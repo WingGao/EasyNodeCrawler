@@ -21,6 +21,7 @@ export class SiteConfig {
   beforeReq?: (res, done) => any; //处理函数
   getHeaders?: () => any = () => {};
   cookie?: string;
+  charset?: string = 'utf8';
   afterReq?: (res, done) => any; //处理函数
   ex?: any = {}; //额外的配置信息
   crawler?: any = {}; //爬虫参数
@@ -35,6 +36,8 @@ export class SiteConfig {
   replyTimeSecond: number = 3 * 60; //帖子回复间隔，秒
   myReplyMaxPerPage: number = 5; //每页回复的帖子个数，防止屠版
   postBlacklist: Array<string> = []; //帖子黑名单，不处理
+  checkinUrl?: string; //签到地址
+  limit: LimitConfig = new LimitConfig();
 
   constructor(props?: Partial<SiteConfig>) {
     _.merge(this, props);
@@ -42,6 +45,9 @@ export class SiteConfig {
 
   fullUrl(p) {
     if (p.indexOf('http') == 0) return p;
+    if (!p.startsWith('/')) {
+      p = '/' + p;
+    }
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
 }
@@ -93,3 +99,11 @@ export class MainConfig {
 let defaultLogger = getLogger('main');
 defaultLogger.level = 'debug';
 let defaultConfig: MainConfig = null;
+
+export class LimitConfig {
+  share: number = -1; //发起分享
+  vote: number = -1; //参与投票次数
+  reply: number = -1; //回复次数
+  thread: number = -1; //主题次数
+  promotionVisit: number = -1; //访问推广
+}

@@ -5,22 +5,26 @@ import path = require('path');
 import brotli = require('brotli');
 import { MainConfig, SiteConfig } from '../config';
 import { Post } from '../post';
+import SiteHorou from '../../sites/SiteHorou';
+import SiteAbooky from '../../sites/SiteAbooky';
 
 let testConfig: SiteConfig;
-let site;
+let site: SiteCrawlerDiscuz;
 beforeAll(async () => {
   // console.log('init');
   if (MainConfig.default() == null) {
     await initConfig(path.resolve(__dirname, '../../../config/dev.yaml'));
   }
-  testConfig = SiteSeikuu();
+  testConfig = SiteAbooky();
   testConfig.enableSave = false;
   site = new SiteCrawlerDiscuz(testConfig);
   jest.setTimeout(3 * 60 * 1000);
 });
 describe('discuz-测试Seikuu-列表', () => {
   test('列表解析', async () => {
-    let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&filter=lastpost&orderby=lastpost`;
+    let ok = await site.checkCookie();
+    expect(ok).toBeTruthy();
+    let url = site.getPostListUrl('9');
     let res = await site.fetchPage(url);
     expect(res.posts).toHaveLength(30);
   });
@@ -67,5 +71,18 @@ describe('discuz-测试Seikuu-文章', () => {
 
   test('测试无权限板块', async () => {
     await site.fetchPage(47);
+  });
+
+  test('投票', async () => {
+    let cateId = '50';
+    let purl = site.getPostListUrl(cateId, 1, '&filter=specialtype&orderby=dateline&specialtype=poll');
+    let { posts } = await site.fetchPage(purl, cateId);
+    expect(posts.length).toBeGreaterThan(10);
+    let post = posts[0];
+    let r = await site.replyVote(post);
+  });
+  test('签到', async () => {
+    let r = await site.checkin();
+    expect(r).toBeTruthy();
   });
 });

@@ -1,21 +1,20 @@
 import { SiteCrawler } from './normal';
-import axios from 'axios';
 import * as iconv from 'iconv-lite';
 import cheerio = require('cheerio');
 import _ = require('lodash');
 import { Post } from '../post';
 import { getInt, toZhSimple } from '../utils';
-import Redis from '../redis';
-
+import FormData = require('form-data');
+import qs = require('qs');
+import urlencode = require('urlencode');
+import { randomCnIP } from '../utils/net';
+import CheckinHandler from '../model/CheckinHandler';
+import { AxiosInstance } from 'axios';
 export class SiteCrawlerDiscuz extends SiteCrawler {
   // Discuz! X3.4
   async checkCookie() {
-    let rep = await axios.get(this.config.fullUrl('/home.php'), {
-      headers: this.config.getHeaders(),
-      responseType: 'arraybuffer',
-    });
-    let data = iconv.decode(rep.data, 'gbk');
-    let uid = /uid=(\d+)/.exec(data);
+    let rep = await this.axiosInst.get(this.config.fullUrl('/home.php?mod=spacecp'));
+    let uid = /uid=(\d+)/.exec(rep.data);
     if (uid && uid.length > 1) {
       return true;
     } else {
@@ -75,14 +74,19 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       // 排除置顶的
       let attId = $tbody.attr('id');
       let post = this.createPost();
-      if (attId.indexOf('normalthread') >= 0) {
+      if (attId && attId.indexOf('normalthread') >= 0) {
         post.id = getInt(attId).toString();
         post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
         post.viewNum = parseInt($tbody.find('.num>em').text());
         post.replyNum = parseInt($tbody.find('.num>a').text());
         let $th = $tbody.find('th');
         post.canReply = $th.attr('class').indexOf('lock') < 0;
-        post._lastReplyUser = $tbody.find('.by cite').text().trim();
+        post.title = $th.find('a.xst').text().trim();
+        let $bys = $tbody.find('.by');
+        post.authorId = /uid=(\d+)/.exec($bys.eq(0).find('cite a').attr('href'))[1];
+        post._lastReplyUser = {
+          uname: $bys.eq(1).find('cite').text().trim(),
+        };
         // 添加到队列
         posts.push(post);
       }
@@ -172,17 +176,17 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     if (post.title == null) {
       post.title = $('#thread_subject').text().trim();
     }
-    if (post.categoryId == null) {
-      //获取目录
-      let as = $('#pt a');
-      let ca = as.get(as.length - 2);
-      let cah = ca.attribs.href;
-      if (cah.indexOf('forum') >= 0) {
-        post.categoryId = getInt(cah).toString();
-      } else {
-        throw new Error('未处理' + cah);
-      }
-    }
+    // if (post.categoryId == null) {
+    //   //获取目录
+    //   let as = $('#pt a');
+    //   let ca = as.get(as.length - 2);
+    //   let cah = ca.attribs.href;
+    //   if (cah.indexOf('forum') >= 0) {
+    //     post.categoryId = getInt(cah).toString();
+    //   } else {
+    //     throw new Error('未处理' + cah);
+    //   }
+    // }
     let replyList = [];
     $('#postlist > div').each((pi, p) => {
       if (found && pcf.onlyMain) return; //只处理楼主
@@ -201,7 +205,8 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         // 正文
         let $body = $(`#postmessage_${pid}`);
         reply.body = $body.text().trim();
-        reply.bodyBin = $body.html().trim();
+        reply._html = $(`#post_${pid}`).html();
+        reply.bodyBin = reply._html;
 
         // 更新时间
         $p.find('.pstatus').each((psi, ps) => {
@@ -228,15 +233,115 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     return post;
   }
 
+  async getFormData($form) {
+    let data = {};
+    $form.find('input').each((i, ipt) => {
+      let ttype = ipt.attribs.type;
+      if (ttype == 'submit' || ttype == 'checkbox' || ipt.attribs.disabled != null) {
+        return;
+      } else {
+        let name = ipt.attribs.name;
+        let value = ipt.attribs.value;
+        data[name] = value;
+      }
+    });
+    return data;
+  }
+
   async sendReply(post: Post, text: string): Promise<any> {
-    return Promise.resolve(undefined);
+    this.logger.info('准备回复', this.config.fullUrl(post.url), text);
+    //&fid=${post.categoryId}
+    let purl = this.config.fullUrl(`/forum.php?mod=post&action=reply&extra=&tid=${post.id}`);
+    let rep = await this.axiosInst.get(purl);
+    let $ = cheerio.load(rep.data);
+    let $form = $(`#postform`);
+    let formData = await this.getFormData($form);
+    formData['message'] = `[color=#000001]${text}[/color]`;
+    let pd = urlencode.stringify(formData, { charset: this.config.charset });
+    let res = await this.axiosInst.post(
+      this.config.fullUrl(`/forum.php?mod=post&action=reply&tid=${post.id}&extra=&replysubmit=yes`),
+      pd,
+    );
+    $ = cheerio.load(res.data);
+    return this.checkPermission($);
   }
 
-  getPostUrl(pid): string {
-    return '';
+  getPostUrl(pid, page = 1): string {
+    return this.config.fullUrl(`/forum.php?mod=viewthread&tid=${pid}&extra=&page=${page}`);
   }
 
-  getPostListUrl(cateId, page): string {
-    return '';
+  getPostListUrl(cateId, page = 1, ext = ''): string {
+    return this.config.fullUrl(`/forum.php?mod=forumdisplay&fid=${cateId}&page=${page}${ext}`);
+  }
+
+  // 伪造推广访问
+  async promotionVisit() {
+    let fromIP = randomCnIP();
+  }
+
+  //参与投票
+  async replyVote(post: Post) {
+    this.logger.info('投票', this.getPostUrl(post.id));
+    post = await this.fetchPost(post);
+    let $ = cheerio.load(`<div>${post._html}</div>`);
+    let $form = $('#poll');
+    if ($form.text().indexOf('您已经投过票') > 0) {
+      this.logger.info('您已经投过票');
+      return false;
+    }
+    let pUrl = this.config.fullUrl($form.attr('action'));
+    let fv = await this.getFormData($form);
+    let ck = $form.find('#option_1');
+    fv[ck.attr('name')] = ck.val();
+    let rep = await this.axiosInst.post(pUrl, qs.stringify(fv));
+    this.logger.info('投票结果', JSON.stringify(fv));
+    let ok = rep.status == 200;
+    if (ok) {
+      //标记
+    }
+    return ok;
+    // https://www.abooky.com/forum.php?mod=forumdisplay&fid=50&filter=author&orderby=dateline&specialtype=poll
+  }
+
+  async checkin() {
+    if (this.config.checkinUrl == null) {
+      this.logger.info('无签到配置');
+      return;
+    }
+    let ck: CheckinHandler;
+    if (this.config.checkinUrl.indexOf('k_misign') > 0) {
+      ck = new KmiSign(this);
+    }
+    return await ck.checkin();
+  }
+}
+
+class KmiSign extends CheckinHandler {
+  site: SiteCrawlerDiscuz;
+  constructor(site: SiteCrawlerDiscuz) {
+    super(async () => {
+      let u = this.site.config.fullUrl(this.site.config.checkinUrl);
+      let rep = await this.site.axiosInst.get(u);
+      return rep.data;
+    });
+    this.site = site;
+  }
+  async doCheck($: CheerioStatic): Promise<boolean> {
+    let link = $('#JD_sign').attr('href');
+    if (!link.startsWith('/')) {
+      link = '/' + link;
+    }
+    let rep = await this.site.axiosInst.get(this.site.config.fullUrl(link));
+    this.site.logger.info(rep.data);
+    return true;
+  }
+
+  isChecked($: CheerioStatic): boolean {
+    let a = $('#qiandaobtnnum');
+    if (a.length > 0) {
+      this.site.logger.info('已签到', a.val());
+      return true;
+    }
+    return false;
   }
 }
