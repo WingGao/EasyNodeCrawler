@@ -14,6 +14,9 @@ import { addCookie, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 
+export interface IPostParseConfig {
+  onlyMain?: boolean;
+}
 export abstract class SiteCrawler {
   config: SiteConfig;
   axiosInst: AxiosInstance;
@@ -28,14 +31,14 @@ export abstract class SiteCrawler {
       headers: _.merge(
         {
           'user-agent': MainConfig.default().userAgent,
-          cookie: config.cookie,
+          cookie: _.defaultTo(config.cookie, ''),
         },
         config.getHeaders(),
       ),
       responseType: 'arraybuffer',
       transformResponse: [
         (data, headers) => {
-          if (headers['content-type'] && headers['content-type'].indexOf('gbk') > 0) {
+          if ((headers['content-type'] && headers['content-type'].indexOf('gbk') > 0) || this.config.charset == 'gbk') {
             return iconv.decode(data, 'gbk');
           }
           // debugger;
@@ -77,20 +80,28 @@ export abstract class SiteCrawler {
 
   abstract checkPermission($): boolean;
 
-  async fetchPage(pageUrl, cateId?): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
+  async fetchPage(
+    pageUrl,
+    cateId?,
+    cnf?: { axConfig?: any },
+  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
     this.logger.info('获取', pageUrl);
-    let rep = await this.axiosInst.get(pageUrl);
+    let rep = await this.axiosInst.get(pageUrl, cnf ? cnf.axConfig : undefined);
     let $ = cheerio.load(rep.data);
     if (!this.checkPermission($)) {
       //没有权限
       return;
     }
-    let res = await this.parsePage($, cateId);
+    let res = await this.parsePage($, cateId, rep.data);
     // 排除黑名单
     res.posts = _.filter(res.posts, (v) => this.config.postBlacklist.indexOf(v.id) < 0);
     return res;
   }
-  abstract parsePage($: CheerioStatic, cateId?): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
+  abstract parsePage(
+    $: CheerioStatic,
+    cateId?,
+    html?: string,
+  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    */
@@ -166,9 +177,9 @@ export abstract class SiteCrawler {
   }
 
   // 专门解析post
-  abstract async parsePost(post: Post, $, pcf?: any);
+  abstract async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post>;
 
-  async fetchPost(post: Post, pcf?: any) {
+  async fetchPost(post: Post, pcf?: IPostParseConfig) {
     let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
     post = await this.parsePost(post, cheerio.load(rep.data), pcf);
     return post;
@@ -253,12 +264,17 @@ export abstract class SiteCrawler {
     await this.sendReply(post, text);
     this.lastReplyTime = new Date().getTime();
   }
+  abstract async sendPost(cp: Post, ext?: any): Promise<boolean>;
 
-  async loopCategory(cateId, cb: (posts: Array<Post>) => Promise<boolean>, cnf: { pageUrlExt?: string } = {}) {
+  async loopCategory(
+    cateId,
+    cb: (posts: Array<Post>) => Promise<boolean>, //true继续，false结束
+    cnf: { pageUrlExt?: string; axConfig?: any } = {},
+  ) {
     let pageG = 1;
     for (let page = 1; page <= pageG; page++) {
       let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
-      let { posts, $, pageMax } = await this.fetchPage(purl, cateId);
+      let { posts, $, pageMax } = await this.fetchPage(purl, cateId, { axConfig: cnf.axConfig });
       pageG = pageMax;
       let ok = await cb(posts);
       if (!ok) {

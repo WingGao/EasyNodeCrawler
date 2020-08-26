@@ -98,6 +98,15 @@ if (require.main === module) {
                   },
                 }),
               ),
+            //灌水
+            () =>
+              spam.doWithLimit('thread', () =>
+                spam.shuiCategoryPost('50', {
+                  createExt: {
+                    typeid: '27',
+                  },
+                }),
+              ),
           ]);
           break;
       }

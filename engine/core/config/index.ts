@@ -35,6 +35,7 @@ export class SiteConfig {
   replyPageSize: number = 10; //每个帖子下面的回复分页大小
   replyTimeSecond: number = 3 * 60; //帖子回复间隔，秒
   myReplyMaxPerPage: number = 5; //每页回复的帖子个数，防止屠版
+  myPostMaxPerPage: number = 5; //主题数
   postBlacklist: Array<string> = []; //帖子黑名单，不处理
   checkinUrl?: string; //签到地址
   limit: LimitConfig = new LimitConfig();

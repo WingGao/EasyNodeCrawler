@@ -231,4 +231,8 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
   getPostListUrl(cateId, page): string {
     return this.config.fullUrl(`/thread.php?fid=${cateId}&page=${page}`);
   }
+
+  async sendPost(cp, ext?: any): Promise<boolean> {
+    return Promise.resolve(false);
+  }
 }

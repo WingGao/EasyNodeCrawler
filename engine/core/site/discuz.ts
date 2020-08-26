@@ -314,6 +314,30 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     }
     return await ck.checkin();
   }
+
+  async sendPost(cp, ext?: any) {
+    let purl = this.config.fullUrl(`/forum.php?mod=post&action=newthread&fid=${cp.categoryId}`);
+    let rep = await this.axiosInst.get(purl);
+    let $ = cheerio.load(rep.data);
+    let $form = $('#postform');
+    let formData = await this.getFormData($form);
+    formData['message'] = cp.body;
+    formData['subject'] = cp.title;
+    let $typeid = $('#typeid');
+    if ($typeid != null) {
+      formData['typeid'] = $typeid.find('option').eq(1).val();
+    }
+    if (ext && ext.typeid) formData['typeid'] = ext.typeid;
+    let res = await this.axiosInst.post(
+      this.config.fullUrl($form.attr('action')),
+      urlencode.stringify(formData, { charset: this.config.charset }),
+    );
+    let $res = cheerio.load(res.data);
+    let $alt = $res('#messagetext');
+    let msg = $alt.text();
+    this.logger.debug(msg);
+    return res.status == 200;
+  }
 }
 
 class KmiSign extends CheckinHandler {

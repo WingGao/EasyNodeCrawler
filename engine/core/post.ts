@@ -27,6 +27,8 @@ export class Post {
   _innerId: number; //楼层号
   _currentPage: number; //所在页码
   _html?: string;
+  _imgs?: Array<string>;
+  _ext?: any;
   uniqId() {
     return `${this.site}-${this.id}`;
   }

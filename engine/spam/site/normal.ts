@@ -9,15 +9,18 @@ import { Post } from '../../core/post';
 import { runSafe, sleep } from '../../core/utils';
 import Redis from '../../core/redis';
 import moment = require('moment');
+import SiteSport163 from '../../core/site/sport163';
 
 let haoList = null;
 export default class SpamNormal {
   config: SiteConfig;
   crawler: SiteCrawler;
+  sport163: SiteSport163;
 
   constructor(config: SiteConfig, crawler: SiteCrawler) {
     this.config = config;
     this.crawler = crawler;
+    this.sport163 = new SiteSport163();
   }
 
   async start(args: any) {}
@@ -116,6 +119,45 @@ export default class SpamNormal {
     return replyed;
     // await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
   }
+  async shuiCategoryPost(
+    cateId,
+    cnf: {
+      onReply?: () => Promise<Post>;
+      samePostReplyPage?: number;
+      checkPost?: (Post) => boolean; //判断post是否符合标准
+      beforeSave?: (SpamRecord) => boolean;
+      pageUrlExt?: string;
+      createExt?: any;
+    },
+  ): Promise<boolean> {
+    let pageRes = await this.crawler.fetchPage(this.crawler.getPostListUrl(cateId));
+    let myPostNum = _.filter(pageRes.posts, (p) => p.authorId == this.config.myUserId).length;
+    this.crawler.logger.debug(`该页主题检测到 ${myPostNum}/${this.config.myPostMaxPerPage}`);
+    if (myPostNum >= this.config.myPostMaxPerPage) {
+      return false;
+    }
+    let cpost: Post;
+    let post163 = false;
+    if (cnf.onReply) cpost = await cnf.onReply();
+    else {
+      cpost = await this.getSport163Post();
+      post163 = true;
+    }
+    cpost.categoryId = cateId;
+    this.crawler.logger.info('创建主题', cpost.title, cpost.body.length);
+    let res = await this.crawler.sendPost(cpost, cnf.createExt);
+    if (!res) {
+      return res;
+    }
+    if (post163) {
+      //标记已使用
+      let rec = new SpamRecord();
+      rec.site = this.config.host;
+      rec.pid = `163:${cpost.id}`;
+      await rec.save();
+    }
+    return true;
+  }
 
   // 获取非楼主的随机回复
   async gerRandomReply(post: Post, page: number) {
@@ -130,6 +172,30 @@ export default class SpamNormal {
     );
     if (replys.length == 0) return null;
     return replys[_.random(0, replys.length - 1, false)];
+  }
+
+  // 随机获取网易的一篇文章
+  async getSport163Post(onlyMain = true) {
+    let post: Post;
+    let dirtyWords = ['胸'];
+    await this.sport163.loopCategory(null, async (posts) => {
+      for (let p of posts) {
+        let hasDirty = _.find(dirtyWords, (v) => p.title.indexOf(v) >= 0);
+        if (hasDirty != null) {
+          continue;
+        }
+        let rec = new SpamRecord();
+        rec.site = this.config.host;
+        rec.pid = `163:${p.id}`;
+        let old = await rec.getById(rec.uniqId());
+        if (old == null) {
+          post = await this.sport163.fetchPost(p, { onlyMain });
+          return false;
+        }
+      }
+      return true;
+    });
+    return post;
   }
 
   // 把所有发帖的操作都放到一起
