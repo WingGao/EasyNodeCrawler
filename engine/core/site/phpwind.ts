@@ -61,7 +61,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
       let $tds = $tbody.find('td');
       // 排除置顶的
       let $ta = $tds.eq(1).find('h3 a');
-      let post = this.createPost();
+      let post = this.newPost();
       post.canReply = true;
       post.categoryId = cateId;
       let isGlobalTop = false; //是否是全局置顶
@@ -106,7 +106,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
         continue;
       }
 
-      let ps = res.posts.map((v) => {
+      let ps: any = res.posts.map((v) => {
         return this.queueAddPost(v);
       });
 
@@ -140,7 +140,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     );
     let foundMain = false;
 
-    post.site = this.config.host;
+    post.site = this.config.key;
     // post.viewNum = parseInt($(v1).text());
     // post.replyNum = parseInt($(sps.get(4)).text());
     post._currentPage = parseInt($('.pages li b').text());

@@ -12,7 +12,7 @@ import _ = require('lodash');
 import SpamNormal from '../spam/site/normal';
 
 export default function getConfig() {
-  let sc = new SiteConfig();
+  let sc = new SiteConfig('www.horou.com');
   sc.name = '河洛中文社区';
   sc.host = 'www.horou.com';
   sc.https = true;

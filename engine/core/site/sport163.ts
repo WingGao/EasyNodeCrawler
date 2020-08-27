@@ -9,7 +9,7 @@ import { AxiosRequestConfig } from 'axios';
 
 class SiteSport163 extends SiteCrawler {
   constructor() {
-    let c = new SiteConfig();
+    let c = new SiteConfig('sports.163.com');
     c.host = 'sports.163.com';
     c.https = true;
     super(c);
@@ -62,7 +62,7 @@ class SiteSport163 extends SiteCrawler {
     let posts: Array<Post> = [];
     items.forEach((v) => {
       if (v.newstype != 'article') return; //只处理文章
-      let p = this.createPost();
+      let p = this.newPost();
       let urls = v.docurl.split('/') as string[];
       p.id = _.last(urls).split('.')[0];
       p.title = v.title;

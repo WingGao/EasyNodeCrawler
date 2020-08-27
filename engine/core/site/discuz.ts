@@ -1,15 +1,16 @@
-import { SiteCrawler } from './normal';
+import { IPostParseConfig, SiteCrawler } from './normal';
 import * as iconv from 'iconv-lite';
 import cheerio = require('cheerio');
 import _ = require('lodash');
 import { Post } from '../post';
-import { getInt, toZhSimple } from '../utils';
+import { getInt, runSafe, sleep, toZhSimple } from '../utils';
 import FormData = require('form-data');
 import qs = require('qs');
 import urlencode = require('urlencode');
 import { randomCnIP } from '../utils/net';
 import CheckinHandler from '../model/CheckinHandler';
 import { AxiosInstance } from 'axios';
+import any = jasmine.any;
 export class SiteCrawlerDiscuz extends SiteCrawler {
   // Discuz! X3.4
   async checkCookie() {
@@ -73,7 +74,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       let $tbody = $(tbody);
       // 排除置顶的
       let attId = $tbody.attr('id');
-      let post = this.createPost();
+      let post = this.newPost();
       if (attId && attId.indexOf('normalthread') >= 0) {
         post.id = getInt(attId).toString();
         post.url = `/forum.php?mod=viewthread&tid=${post.id}`;
@@ -81,9 +82,21 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         post.replyNum = parseInt($tbody.find('.num>a').text());
         let $th = $tbody.find('th');
         post.canReply = $th.attr('class').indexOf('lock') < 0;
-        post.title = $th.find('a.xst').text().trim();
+        post.title = $th
+          .find('a')
+          .filter((i, v) => v.attribs && v.attribs.href.indexOf(post.id) > 0)
+          .text()
+          .trim();
         let $bys = $tbody.find('.by');
         post.authorId = /uid=(\d+)/.exec($bys.eq(0).find('cite a').attr('href'))[1];
+        let timeTxt: string;
+        let $time1 = $bys
+          .eq(0)
+          .find('em span')
+          .filter((i, x) => x.attribs && x.attribs.title);
+        if ($time1.length > 0) timeTxt = $time1.attr('title');
+        else timeTxt = $bys.eq(0).find('em').text();
+        post.createTime = new Date(timeTxt.trim());
         post._lastReplyUser = {
           uname: $bys.eq(1).find('cite').text().trim(),
         };
@@ -103,37 +116,41 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     return { posts, $, pageMax };
   }
 
-  async fetchPages(cateId) {
-    let pageMax = 1;
-    for (let page = 1; page <= pageMax; page++) {
-      // 按发帖时间
-      let listUrl = this.config.fullUrl(`/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`);
-      let res = await this.fetchPage(listUrl);
+  // async fetchPages(cateId) {
+  //   let pageMax = 1;
+  //   for (let page = 1; page <= pageMax; page++) {
+  //     await runSafe(
+  //       async () => {
+  //         // 按发帖时间
+  //         let listUrl = this.config.fullUrl(`/forum.php?mod=forumdisplay&fid=${cateId}&orderby=dateline&page=${page}`);
+  //         let res = await this.fetchPage(listUrl);
+  //
+  //         if (res == null) {
+  //           //没有权限
+  //           return;
+  //         }
+  //
+  //         let ps: any = res.posts.map((v) => {
+  //           //添加到队列
+  //           return this.queueAddPost(v);
+  //         });
+  //
+  //         if (page == 1) {
+  //           pageMax = res.pageMax;
+  //           this.logger.info('最大', pageMax);
+  //         }
+  //       },
+  //       async () => {
+  //         await sleep(5000);
+  //         return false;
+  //       },
+  //     );
+  //   }
+  // }
 
-      if (res == null) {
-        //没有权限
-        continue;
-      }
-
-      let ps = res.posts.map((v) => {
-        return this.queueAddPost(v);
-      });
-
-      if (page == 1) {
-        pageMax = res.pageMax;
-        this.logger.info('最大', pageMax);
-      }
-      this.logger.info('添加任务', ps.length);
-      await Promise.all(ps);
-    }
-  }
-
-  async startFindLinks(): Promise<any> {
-    for (let cate of this.config.ex.categorys) {
-      this.logger.info('处理', cate.name);
-      await this.fetchPages(cate.id);
-    }
-    this.logger.info('获取post链接完毕');
+  startFindLinks(cates: any[], cnf: IPostParseConfig = {}): Promise<any> {
+    cnf.pageUrlExt = '&orderby=dateline';
+    return super.startFindLinks(cates, cnf);
   }
 
   //将楼层转换为数字
@@ -165,7 +182,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     );
     let found = false;
     let $tds = $($('#postlist > table').get(0)).find('td');
-    post.site = this.config.host;
+    post.site = this.config.key;
     // 查看: 547|回复: 294
     let sps = $($tds.get(0)).find('span');
     let v1 = sps.get(1);
@@ -361,9 +378,10 @@ class KmiSign extends CheckinHandler {
   }
 
   isChecked($: CheerioStatic): boolean {
-    let a = $('#qiandaobtnnum');
-    if (a.length > 0) {
-      this.site.logger.info('已签到', a.val());
+    let a = $('#qiandaobtnnum').next();
+    let info = a.text().trim();
+    if (info.indexOf('排名') >= 0) {
+      this.site.logger.info(info);
       return true;
     }
     return false;

@@ -11,7 +11,7 @@ import SpamDiscuz from '../spam/site/discuz';
 import _ = require('lodash');
 
 export default function getConfig() {
-  let sc = new SiteConfig();
+  let sc = new SiteConfig('bbs2.seikuu.com');
   sc.name = '星空论坛';
   sc.host = 'bbs2.seikuu.com';
   sc.https = true;

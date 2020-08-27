@@ -13,7 +13,7 @@ import SpamNormal from '../spam/site/normal';
 import { sleep } from '../core/utils';
 
 export default function getConfig() {
-  let sc = new SiteConfig();
+  let sc = new SiteConfig('south-plus.net');
   sc.name = '南+';
   sc.host = 'south-plus.net';
   sc.https = true;
@@ -25,6 +25,7 @@ export default function getConfig() {
   sc.cookie = cookies[sc.host].cookie;
   sc.replyPageSize = 30;
   sc.myReplyMaxPerPage = 8;
+  sc.limit.reply = 80;
   sc.postBlacklist = [
     '501667', //关于三次元儿童色情的再次警告和说明
   ];
@@ -131,20 +132,24 @@ if (require.main === module) {
           await spam.shuiTask([
             //同人音声
             () =>
-              spam.shuiCagegory('128', {
-                onReply: async (p) => {
-                  return '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ';
-                },
-              }),
+              spam.doWithLimit('reply', () =>
+                spam.shuiCagegory('128', {
+                  onReply: async (p) => {
+                    return '感 [s:701] 谢 [s:692] 分[s:705] 享 [s:692] ';
+                  },
+                }),
+              ),
             //水楼
             () =>
-              spam.shuiCagegory('9', {
-                checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
-                onReply: async (p: Post) => {
-                  let re = await spam.gerRandomReply(p, 2);
-                  return re == null ? null : re.body;
-                },
-              }),
+              spam.doWithLimit('reply', () =>
+                spam.shuiCagegory('9', {
+                  checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
+                  onReply: async (p: Post) => {
+                    let re = await spam.gerRandomReply(p, 2);
+                    return re == null ? null : re.body;
+                  },
+                }),
+              ),
             // 求物，无sp
             // () =>
             //   spam.shuiCagegory('48', {

@@ -1,14 +1,43 @@
-import { SiteCrawler } from './normal';
+import { SiteCrawler, IPostParseConfig } from './normal';
 import { SiteConfig } from '../config';
 import { initConfig } from '../index';
 import { waitUntilLoad } from '../utils/selenium';
 import { By, WebElement } from 'selenium-webdriver';
 import fs = require('fs');
 import path = require('path');
+import { Post } from '../post';
 
 class Zhonghuayuwen extends SiteCrawler {
+  checkPermission($: any): boolean {
+    throw new Error('Method not implemented.');
+  }
+  parsePage(
+    $: CheerioStatic,
+    cateId?: any,
+    html?: string,
+  ): Promise<{ posts: import('../post').Post[]; $: CheerioStatic; pageMax: number }> {
+    throw new Error('Method not implemented.');
+  }
+  checkCookie() {
+    throw new Error('Method not implemented.');
+  }
+  parsePost(post: Post, $: any, pcf?: IPostParseConfig): Promise<import('../post').Post> {
+    throw new Error('Method not implemented.');
+  }
+  getPostUrl(pid: any, page?: number): string {
+    throw new Error('Method not implemented.');
+  }
+  getPostListUrl(cateId: any, page?: number, ext?: string): string {
+    throw new Error('Method not implemented.');
+  }
+  sendReply(post: Post, text: string) {
+    throw new Error('Method not implemented.');
+  }
+  sendPost(cp: Post, ext?: any): Promise<boolean> {
+    throw new Error('Method not implemented.');
+  }
   constructor() {
-    let config = new SiteConfig({
+    let config = new SiteConfig('corpus.zhonghuayuwen.org', {
       host: 'corpus.zhonghuayuwen.org',
       enableSave: false,
     });

@@ -1,12 +1,12 @@
 /**
  * 爬取的文章数据
  */
-import ESClient from './es';
+import ESClient, { EsModel } from './es';
 import { MainConfig } from './config';
 // import brotli = require('brotli');
 import _ = require('lodash');
 
-export class Post {
+export class Post extends EsModel {
   site: string; //站点的host
   id: string;
   url: string; //相对路径
@@ -37,48 +37,6 @@ export class Post {
     return `${MainConfig.default().dataPrefix}post`;
   }
 
-  async getById(id: string) {
-    let res = await ESClient.inst()
-      .get({
-        index: this.indexName(),
-        id,
-      })
-      .catch((e) => e);
-
-    if (res.statusCode == 200) {
-      let p = new Post();
-      return _.merge(p, res.body._source);
-    } else {
-      return null;
-    }
-  }
-  async save() {
-    let body = _.pickBy(this, (v, k) => {
-      return k.indexOf('_') != 0;
-    });
-    let pa = {
-      index: this.indexName(),
-      id: this.uniqId(),
-      body,
-    };
-    // debugger;
-    let res = await ESClient.inst()
-      .create(pa)
-      .catch((e) => {
-        return e;
-      });
-    if (res.statusCode == 201) {
-      return true;
-    } else {
-      switch (res.message) {
-        case 'version_conflict_engine_exception': //重复
-          return false;
-        default:
-          throw res;
-      }
-    }
-  }
-
   async _createIndex() {
     let res = await ESClient.inst().indices.create({
       index: this.indexName(),
@@ -102,6 +60,7 @@ export class Post {
         },
       },
     });
+    return true;
   }
 
   encodeBody(sc: number) {
@@ -120,5 +79,9 @@ export class Post {
     if (this.bodyBin == null) return;
     // let b = Buffer.from(this.bodyBin, 'base64');
     // return Buffer.from(brotli.decompress(b)).toString();
+  }
+
+  newOne() {
+    return new Post();
   }
 }

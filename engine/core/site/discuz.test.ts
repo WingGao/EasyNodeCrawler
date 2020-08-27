@@ -7,6 +7,7 @@ import { MainConfig, SiteConfig } from '../config';
 import { Post } from '../post';
 import SiteHorou from '../../sites/SiteHorou';
 import SiteAbooky from '../../sites/SiteAbooky';
+import SiteShuyue from '../../sites/SiteShuyue';
 
 let testConfig: SiteConfig;
 let site: SiteCrawlerDiscuz;
@@ -15,36 +16,44 @@ beforeAll(async () => {
   if (MainConfig.default() == null) {
     await initConfig(path.resolve(__dirname, '../../../config/dev.yaml'));
   }
-  testConfig = SiteAbooky();
+  testConfig = SiteShuyue();
   testConfig.enableSave = false;
   site = new SiteCrawlerDiscuz(testConfig);
   jest.setTimeout(3 * 60 * 1000);
 });
 describe('discuz-测试Seikuu-列表', () => {
-  test('列表解析', async () => {
+  test('目录', async () => {
     let ok = await site.checkCookie();
     expect(ok).toBeTruthy();
-    let url = site.getPostListUrl('9');
+    let cates = await site.listCategory();
+  });
+  test('列表解析', async () => {
+    let url = site.getPostListUrl('18');
     let res = await site.fetchPage(url);
-    expect(res.posts).toHaveLength(30);
+    expect(res.pageMax).toBeGreaterThan(10);
+    expect(res.posts.length).toBeGreaterThan(1);
+    let p = res.posts[0];
+    expect(p.id).toMatch(/^\d+$/);
+    expect(p.title.length).toBeGreaterThan(5);
+    expect(p.authorId).toMatch(/^\d+$/);
+    expect(p.createTime.getTime()).toBeGreaterThan(100000);
   });
-  test('列表解析-锁定', async () => {
-    let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&orderby=replies&orderby=replies&filter=reply&page=1`;
-    let res = await site.fetchPage(url);
-    expect(res.posts).toHaveLength(30);
-    let post = res.posts[0];
-    expect(post.canReply).toBeFalsy();
-  });
-  test('123', async () => {
-    const notifier = require('node-notifier');
-    notifier.notify('Message');
-  });
+  // test('列表解析-锁定', async () => {
+  //   let url = `https://bbs2.seikuu.com/forum.php?mod=forumdisplay&fid=43&orderby=replies&orderby=replies&filter=reply&page=1`;
+  //   let res = await site.fetchPage(url);
+  //   expect(res.posts).toHaveLength(30);
+  //   let post = res.posts[0];
+  //   expect(post.canReply).toBeFalsy();
+  // });
+  // test('123', async () => {
+  //   const notifier = require('node-notifier');
+  //   notifier.notify('Message');
+  // });
 });
 
 describe('discuz-测试Seikuu-文章', () => {
   test('文章解析', async () => {
-    let post = new Post();
-    post.site = site.config.host;
+    let post = site.newPost();
     post.id = '243457';
     post.url = '/forum.php?mod=viewthread&tid=243457';
     await site.fetchPost(post);
@@ -53,16 +62,14 @@ describe('discuz-测试Seikuu-文章', () => {
   });
 
   test('文章解析-空内容', async () => {
-    let post = new Post();
-    post.site = site.config.host;
+    let post = site.newPost();
     post.id = '195340';
     post.url = '/forum.php?mod=viewthread&tid=195340';
     expect(await site.fetchPost(post)).toBeTruthy();
     expect(post.replyNum).toBeGreaterThan(1);
   });
   test('文章解析-无法回复', async () => {
-    let post = new Post();
-    post.site = site.config.host;
+    let post = site.newPost();
     post.id = '86067';
     post.url = '/forum.php?mod=viewthread&tid=86067';
     expect(await site.fetchPost(post)).toBeTruthy();

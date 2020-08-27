@@ -222,7 +222,7 @@ export default class SpamNormal {
 
   async isLimited(limitKey: keyof LimitConfig): Promise<boolean> {
     let maxVal = this.config.limit[limitKey];
-    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.host}:todayLimit:${limitKey}`;
+    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.key}:todayLimit:${limitKey}`;
     if (maxVal == 0) return true;
     else if (maxVal > 0) {
       let currentVal = await Redis.inst().get(redisKey);
@@ -236,7 +236,13 @@ export default class SpamNormal {
   async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
     let maxVal = this.config.limit[limitKey];
     let currentVal = 0;
-    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.host}:todayLimit:${limitKey}`;
+    let redisKey = `${MainConfig.default().dataPrefix}:${this.config.key}:todayLimit:${limitKey}`;
+    let dec = async () => {
+      if (maxVal > 0) {
+        //失败了就复原
+        await Redis.inst().decr(redisKey);
+      }
+    };
     if (maxVal == 0) {
       //不允许
       this.crawler.logger.info('doWithLimit 不允许', limitKey, maxVal);
@@ -251,17 +257,13 @@ export default class SpamNormal {
       }
       if (currentVal > maxVal) {
         this.crawler.logger.info('doWithLimit 到达上限', limitKey, maxVal);
+        await dec();
         return false;
       } else {
         this.crawler.logger.info(`doWithLimit ${limitKey} ${currentVal}/${maxVal}`);
       }
     }
-    let dec = async () => {
-      if (maxVal > 0) {
-        //失败了就复原
-        await Redis.inst().decr(redisKey);
-      }
-    };
+
     try {
       let res = await action();
       if (!res) {

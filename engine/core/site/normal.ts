@@ -16,6 +16,8 @@ import * as moment from 'moment';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
+  pageUrlExt?: string;
+  axConfig?: any;
 }
 export abstract class SiteCrawler {
   config: SiteConfig;
@@ -94,7 +96,10 @@ export abstract class SiteCrawler {
     }
     let res = await this.parsePage($, cateId, rep.data);
     // 排除黑名单
-    res.posts = _.filter(res.posts, (v) => this.config.postBlacklist.indexOf(v.id) < 0);
+    res.posts = _.filter(res.posts, (v) => {
+      if (v.categoryId == null) v.categoryId = cateId;
+      return this.config.postBlacklist.indexOf(v.id) < 0;
+    });
     return res;
   }
   abstract parsePage(
@@ -105,7 +110,25 @@ export abstract class SiteCrawler {
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    */
-  abstract async startFindLinks();
+  async startFindLinks(cates: any[], cnf: IPostParseConfig = {}) {
+    for (let cate of cates) {
+      this.logger.info('获取链接', JSON.stringify(cate));
+      await this.loopCategory(
+        cate.id,
+        async (posts) => {
+          let ps: any = posts.map((v) => {
+            //添加到队列
+            return this.queueAddPost(v);
+          });
+          this.logger.info('添加任务', ps.length);
+          await Promise.all(ps);
+          return true;
+        },
+        cnf,
+      );
+    }
+    this.logger.info('获取post链接完毕');
+  }
 
   /**
    * 开启爬取
@@ -153,12 +176,12 @@ export abstract class SiteCrawler {
   abstract async checkCookie();
 
   _queueName() {
-    return `node_crawler:queue:${this.config.host}`;
+    return `node_crawler:queue:${this.config.key}`;
   }
 
-  createPost() {
+  newPost() {
     let p = new Post();
-    p.site = this.config.host;
+    p.site = this.config.key;
     return p;
   }
 
@@ -167,6 +190,9 @@ export abstract class SiteCrawler {
    * @param post
    */
   queueAddPost(post: Post) {
+    if (this.config.savePageResult) {
+      return post.save();
+    }
     return this.queue.add('post', post, {
       attempts: 3,
       backoff: {
@@ -212,9 +238,7 @@ export abstract class SiteCrawler {
     const worker = new Worker(
       this._queueName(),
       async (job) => {
-        // Will print { foo: 'bar'} for the first job
-        // and { qux: 'baz' } for the second.
-        let p = this.createPost();
+        let p = this.newPost();
         p = _.merge(p, job.data);
         await this.fetchPostAndSave(p);
       },
@@ -254,6 +278,8 @@ export abstract class SiteCrawler {
   abstract getPostListUrl(cateId, page?: number, ext?: string): string;
 
   abstract async sendReply(post: Post, text: string);
+
+  // 一般爬取都是从新往旧的爬
   async sendReplyLimit(post: Post, text: string) {
     let delay = new Date().getTime() - this.lastReplyTime;
     delay = this.config.replyTimeSecond * 1000 - delay;
@@ -269,12 +295,15 @@ export abstract class SiteCrawler {
   async loopCategory(
     cateId,
     cb: (posts: Array<Post>) => Promise<boolean>, //true继续，false结束
-    cnf: { pageUrlExt?: string; axConfig?: any } = {},
+    cnf: IPostParseConfig = {},
   ) {
     let pageG = 1;
     for (let page = 1; page <= pageG; page++) {
       let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
       let { posts, $, pageMax } = await this.fetchPage(purl, cateId, { axConfig: cnf.axConfig });
+      if (page == 1) {
+        this.logger.debug(`最大页数 ${pageMax}`);
+      }
       pageG = pageMax;
       let ok = await cb(posts);
       if (!ok) {

@@ -19,7 +19,7 @@ export abstract class EsModel {
 
   abstract newOne();
 
-  abstract async _createIndex();
+  abstract _createIndex(): Promise<boolean>;
 
   async getById(id: string) {
     let res = await ESClient.inst()
@@ -39,11 +39,10 @@ export abstract class EsModel {
 
   /**
    * 全量更新
-   * @param upsert
    */
   async save() {
     let body = _.pickBy(this, (v, k) => {
-      return k.indexOf('_') != 0;
+      return k.indexOf('_') != 0 && v != undefined;
     });
     let pa = {
       index: this.indexName(),

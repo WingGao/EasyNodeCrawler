@@ -14,6 +14,7 @@ import { getLogger } from 'log4js';
 
 export class SiteConfig {
   name: string;
+  key: string;
   host: string;
   siteType?: SiteType = SiteType.Normal;
   https?: boolean = false;
@@ -27,7 +28,8 @@ export class SiteConfig {
   crawler?: any = {}; //爬虫参数
   proxys?: IProxy[] = []; //代理，第一个是主代理
   toZh?: boolean = false; //转为简体
-  saveBody?: 0 | 1 | 2 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
+  saveBody?: 0 | 1 | 2 | 3 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
+  savePageResult?: boolean = false; //是否直接保存pagelist页面的结果（只保存标题，不注重内容）
   enableSave?: boolean = true; //是否开启保存
   myUsername?: string; //我的用户名，区分用户
   myUserId?: string;
@@ -40,7 +42,8 @@ export class SiteConfig {
   checkinUrl?: string; //签到地址
   limit: LimitConfig = new LimitConfig();
 
-  constructor(props?: Partial<SiteConfig>) {
+  constructor(key: string, props?: Partial<SiteConfig>) {
+    this.key = key;
     _.merge(this, props);
   }
 
