@@ -55,7 +55,7 @@ export abstract class EsModel {
       .catch((e) => {
         return e;
       });
-    MainConfig.logger().debug('ES', `[${pa.index}, ${pa.id}]`, res.body.result, res.statusCode);
+    // MainConfig.logger().debug('ES', `[${pa.index}, ${pa.id}]`, res.body.result, res.statusCode);
     if (res.statusCode == 201 || res.statusCode == 200) {
       return true;
     } else {

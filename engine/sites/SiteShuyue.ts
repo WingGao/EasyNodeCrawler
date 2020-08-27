@@ -126,18 +126,22 @@ if (require.main === module) {
     let cnf = getConfig();
     let site = new SiteCrawlerDiscuz(cnf);
     let spam = new SpamNormal(cnf, site);
-
-    let ua = await inquirer.prompt({
-      name: 'action',
-      type: 'rawlist',
-      message: '选择操作',
-      choices: [
-        { name: '获取链接', value: 'link' },
-        { name: '获取详情', value: 'post' },
-        { name: '灌水', value: 'shui' },
-      ],
-      default: 2,
-    });
+    let ua = { action: null };
+    if (_.size(yargs.argv._) == 0) {
+      ua = await inquirer.prompt({
+        name: 'action',
+        type: 'rawlist',
+        message: '选择操作',
+        choices: [
+          { name: '获取链接', value: 'link' },
+          { name: '获取详情', value: 'post' },
+          { name: '灌水', value: 'shui' },
+        ],
+        default: 2,
+      });
+    } else {
+      ua.action = yargs.argv._[0];
+    }
 
     switch (ua.action) {
       case 'link': //爬取link

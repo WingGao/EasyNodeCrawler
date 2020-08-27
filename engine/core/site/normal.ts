@@ -109,6 +109,7 @@ export abstract class SiteCrawler {
   ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
+   * 一般爬取都是从新往旧的爬
    */
   async startFindLinks(cates: any[], cnf: IPostParseConfig = {}) {
     for (let cate of cates) {
@@ -279,7 +280,6 @@ export abstract class SiteCrawler {
 
   abstract async sendReply(post: Post, text: string);
 
-  // 一般爬取都是从新往旧的爬
   async sendReplyLimit(post: Post, text: string) {
     let delay = new Date().getTime() - this.lastReplyTime;
     delay = this.config.replyTimeSecond * 1000 - delay;
