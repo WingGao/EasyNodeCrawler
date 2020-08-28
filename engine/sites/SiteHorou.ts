@@ -25,7 +25,6 @@ export default function getConfig() {
   sc.myUsername = 'shaziniu1';
   sc.myUserId = '334371';
   sc.myReplyMaxPerPage = 8;
-  sc.replyTimeSecond = (60 * 60) / 15; //1小时15帖
   sc.limit.reply = 98;
   sc.checkinUrl = '/plugin.php?id=k_misign:sign';
   sc.cookie = cookies[sc.host].cookie;
@@ -55,6 +54,7 @@ if (require.main === module) {
     }
     async shui() {
       cnf.saveBody = 0;
+      cnf.replyTimeSecond = 60; //(60 * 60) / 15; //1小时15帖
       await this.site.checkin();
       await this.spam.shuiTask([
         //河洛茶馆

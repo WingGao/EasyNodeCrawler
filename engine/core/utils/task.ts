@@ -5,6 +5,7 @@ let ignoreErrors = [
   'socket hang up',
   'Client network socket disconnected before secure TLS connection was established',
 ];
+// onError: false继续，true退出
 export async function runSafe(act: () => Promise<any>, onError: (Error) => Promise<boolean>) {
   while (true) {
     let ok = true;

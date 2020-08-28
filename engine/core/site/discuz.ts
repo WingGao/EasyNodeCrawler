@@ -88,7 +88,11 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
           .text()
           .trim();
         let $bys = $tbody.find('.by');
-        post.authorId = /uid=(\d+)/.exec($bys.eq(0).find('cite a').attr('href'))[1];
+        let $authorA = $bys.eq(0).find('cite a');
+        if ($authorA.length > 0) {
+          //还有匿名的情况
+          post.authorId = /uid=(\d+)/.exec($authorA.attr('href'))[1];
+        }
         let timeTxt: string;
         let $time1 = $bys
           .eq(0)

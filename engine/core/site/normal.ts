@@ -10,7 +10,7 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
-import { addCookie, sleep } from '../utils';
+import { addCookie, runSafe, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 import * as fs from 'fs';
@@ -19,6 +19,7 @@ export interface IPostParseConfig {
   onlyMain?: boolean;
   pageUrlExt?: string;
   axConfig?: any;
+  cachePrefix?: any; //1小时内判断是否遍历过
 }
 export abstract class SiteCrawler {
   config: SiteConfig;
@@ -85,6 +86,7 @@ export abstract class SiteCrawler {
   async init() {
     this.cache = new SiteCacheInfo();
     await this.cache.load(this.config.key);
+    await this.checkCookie();
   }
 
   abstract checkPermission($): boolean;
@@ -119,6 +121,7 @@ export abstract class SiteCrawler {
    * 一般爬取都是从新往旧的爬
    */
   async startFindLinks(cates: any[], cnf: IPostParseConfig = {}) {
+    cnf.cachePrefix = 'startFindLinks';
     for (let cate of cates) {
       this.logger.info('获取链接', JSON.stringify(cate));
       let lastId = null;
@@ -343,13 +346,37 @@ export abstract class SiteCrawler {
   ) {
     let pageG = 1;
     for (let page = 1; page <= pageG; page++) {
-      let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
-      let { posts, $, pageMax } = await this.fetchPage(purl, cateId, { axConfig: cnf.axConfig });
-      if (page == 1) {
-        this.logger.debug(`最大页数 ${pageMax}`);
-      }
-      pageG = pageMax;
-      let ok = await cb(posts);
+      let ok = true;
+      let visitKey;
+      await runSafe(
+        async () => {
+          let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
+          if (page > 1) {
+            if (cnf.cachePrefix != null) {
+              visitKey =
+                `${MainConfig.default().dataPrefix}:${this.config.key}:visited:${cnf.cachePrefix}:` +
+                `${cateId}:page-${page}`;
+              //判断是否遍历过
+              let visited = await Redis.inst().get(visitKey);
+              if (visited != null) {
+                this.logger.debug('visited', purl);
+                return;
+              }
+            }
+          }
+          let { posts, $, pageMax } = await this.fetchPage(purl, cateId, { axConfig: cnf.axConfig });
+          if (page == 1) {
+            this.logger.debug(`最大页数 ${pageMax}`);
+          }
+          pageG = pageMax;
+          ok = await cb(posts);
+          if (visitKey) await Redis.inst().setex(visitKey, 3600, 1);
+        },
+        async (e) => {
+          this.logger.error(e);
+          return false;
+        },
+      );
       if (!ok) {
         break;
       }
