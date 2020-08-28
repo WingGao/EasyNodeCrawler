@@ -54,7 +54,7 @@ if (require.main === module) {
     }
     async shui() {
       cnf.saveBody = 0;
-      cnf.replyTimeSecond = 60; //(60 * 60) / 15; //1小时15帖
+      cnf.replyTimeSecond = (60 * 60) / 20; //1小时15帖
       await this.site.checkin();
       await this.spam.shuiTask([
         //河洛茶馆
