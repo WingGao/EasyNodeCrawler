@@ -45,7 +45,11 @@ export default function getConfig() {
   //要爬取的板块
   sc.ex.categorys = [
     // { "id": "117", "name": "灰色汉化组", "canShow": false },
+    { id: '37', name: '审核' },
+    { id: '38', name: '二次元' },
     { id: '39', name: '全本小说' },
+    { id: '40', name: '常规' },
+    { id: '42', name: '女频' },
   ];
   return sc;
 }

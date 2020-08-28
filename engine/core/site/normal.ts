@@ -13,6 +13,7 @@ import { WebDriver } from 'selenium-webdriver';
 import { addCookie, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
+import * as fs from 'fs';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -330,6 +331,12 @@ export abstract class SiteCrawler {
   //签到
   async checkin(): Promise<boolean> {
     return false;
+  }
+
+  ensureTempDir() {
+    if (!fs.existsSync(this.config.tempPath)) {
+      fs.mkdirSync(this.config.tempPath);
+    }
   }
 }
 

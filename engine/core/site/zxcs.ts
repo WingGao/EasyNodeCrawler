@@ -5,6 +5,10 @@ import cheerio = require('cheerio');
 import _ = require('lodash');
 import { initConfig } from '../index';
 import ESClient from '../es';
+import * as path from 'path';
+import * as fs from 'fs';
+import execa = require('execa');
+import { execaCn } from '../utils';
 
 class SiteZxcsCrawler extends SiteCrawler {
   constructor() {
@@ -34,6 +38,7 @@ class SiteZxcsCrawler extends SiteCrawler {
     ];
 
     super(c);
+    this.ensureTempDir();
   }
   async checkCookie(): Promise<any> {
     return true;
@@ -98,8 +103,56 @@ class SiteZxcsCrawler extends SiteCrawler {
     return Promise.resolve(undefined);
   }
 
+  async fetchDownloadLink(pid) {
+    let rep = await this.axiosInst.get(this.config.fullUrl(`/download.php?id=${pid}`));
+    const $ = cheerio.load(rep.data);
+    const link = $('.panel-body .downfile a').eq(0).attr('href');
+    return link;
+  }
+
   // 下载书籍
-  async downloadBook(p: Post) {}
+  async downloadBook(p: Post) {
+    this.logger.info(`downloadBook 下载 ${p.title} ${p.id}`);
+    let dUrl = await this.fetchDownloadLink(p.id);
+    let sname = this.getSearchName(p.title);
+    let newFile = path.resolve(this.config.tempPath, `./${p.title}.txt`);
+    if (fs.existsSync(newFile)) {
+      this.logger.info(`downloadBook 已存在`);
+      return newFile;
+    }
+    let rep = await this.axiosInst.get(dUrl, {
+      responseType: 'stream',
+      transformResponse: (d) => d,
+    });
+    let ext = _.last(dUrl.split('.'));
+    let tmpFile = path.resolve(this.config.tempPath, `${p.id}.${ext}`); //rar文件
+    let d = rep.data.pipe(fs.createWriteStream(tmpFile, { emitClose: true }));
+    await new Promise((resolve) =>
+      d.on('close', () => {
+        resolve();
+      }),
+    );
+    if (ext == 'rar') {
+      //使用rar解压
+      let rarTmp = path.resolve(this.config.tempPath, 'rar');
+      if (!fs.existsSync(rarTmp)) fs.mkdirSync(rarTmp);
+      let res = execaCn.commandSync(`WinRAR.exe x ${tmpFile} ${rarTmp}`);
+      if (!res.failed) {
+        let files = fs.readdirSync(rarTmp);
+        let txtFile = _.find(files, (v) => v.indexOf(sname) >= 0);
+        fs.renameSync(path.resolve(rarTmp, txtFile), newFile);
+        fs.unlinkSync(tmpFile); //解压完后删除
+      } else {
+        debugger;
+      }
+    }
+    this.logger.info('downloadBook 完成');
+    return newFile;
+  }
+
+  getSearchName(tit: string) {
+    return /《([^》]+)》/.exec(tit)[1];
+  }
   // 找到不存在的书
   async findDiffWithSite(siteKey: string) {
     // 一本本找
@@ -158,6 +211,7 @@ class SiteZxcsCrawler extends SiteCrawler {
           this.logger.info('命中', hitLen);
           if (hitLen == 0) {
             //可以发书
+            let bookPath = await this.downloadBook(np);
             debugger;
           }
         }

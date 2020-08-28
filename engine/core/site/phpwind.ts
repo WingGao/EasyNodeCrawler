@@ -199,7 +199,7 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
       return el.attribs.action.indexOf('post.php') >= 0;
     });
     let fdo = await this.getFormData($form);
-    fdo['atc_title'] = fdo['atc_title'].substr(0, 90);
+    fdo['atc_title'] = fdo['atc_title'].substr(0, 40);
     fdo['atc_content'] = text;
     let formData = toFormData(fdo);
     let res = await this.axiosInst.post(this.config.fullUrl(`/post.php`), formData, {

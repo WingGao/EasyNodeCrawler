@@ -1,3 +1,4 @@
 db.sqlite
 datas
 config/cookie-loc.json
+temp/

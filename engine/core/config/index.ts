@@ -7,6 +7,7 @@ import fs = require('fs');
 import _ = require('lodash');
 import { Post } from '../post';
 import { getLogger } from 'log4js';
+import * as path from 'path';
 
 /**
  * 爬取站点的配置
@@ -41,10 +42,12 @@ export class SiteConfig {
   postBlacklist: Array<string> = []; //帖子黑名单，不处理
   checkinUrl?: string; //签到地址
   limit: LimitConfig = new LimitConfig();
+  tempPath: string;
 
   constructor(key: string, props?: Partial<SiteConfig>) {
     this.key = key;
     _.merge(this, props);
+    this.tempPath = path.resolve(__dirname, '../../../temp/' + key);
   }
 
   fullUrl(p) {
