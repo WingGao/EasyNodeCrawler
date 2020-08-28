@@ -71,7 +71,7 @@ if (require.main === module) {
 
     switch (ua.action) {
       case 'link': //爬取link
-        await site.startFindLinks();
+        await site.startFindLinks(cnf.ex.categorys);
         break;
       case 'post':
         site.startWorker();

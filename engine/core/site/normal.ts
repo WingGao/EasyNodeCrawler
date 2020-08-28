@@ -131,6 +131,21 @@ export abstract class SiteCrawler {
     this.logger.info('获取post链接完毕');
   }
 
+  async getFormData($form) {
+    let data = {};
+    $form.find('input').each((i, ipt) => {
+      let ttype = ipt.attribs.type;
+      if (ttype == 'submit' || ttype == 'checkbox' || ipt.attribs.disabled != null) {
+        return;
+      } else {
+        let name = ipt.attribs.name;
+        let value = ipt.attribs.value;
+        data[name] = value;
+      }
+    });
+    return data;
+  }
+
   /**
    * 开启爬取
    */

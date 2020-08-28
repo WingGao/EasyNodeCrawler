@@ -4,7 +4,7 @@ import * as iconv from 'iconv-lite';
 import cheerio = require('cheerio');
 import _ = require('lodash');
 import { Post } from '../post';
-import { getInt, sleep, toZhSimple, waitUntilLoad } from '../utils';
+import { getInt, sleep, toFormData, toZhSimple, waitUntilLoad } from '../utils';
 import Redis from '../redis';
 import { By } from 'selenium-webdriver';
 import FormData = require('form-data');
@@ -190,20 +190,6 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     return post;
   }
 
-  async getFormData($form) {
-    let data = new FormData();
-    $form.find('input').each((i, ipt) => {
-      let ttype = ipt.attribs.type;
-      if (ttype == 'submit' || ttype == 'checkbox' || ipt.attribs.disabled != null) {
-        return;
-      } else {
-        let name = ipt.attribs.name;
-        let value = ipt.attribs.value;
-        data.append(name, value);
-      }
-    });
-    return data;
-  }
   async sendReply(post: Post, text: string): Promise<any> {
     this.logger.info('准备回复', this.config.fullUrl(post.url), text);
     let purl = this.config.fullUrl(`/post.php?action-reply-fid-${post.categoryId}-tid-${post.id}.html`);
@@ -212,8 +198,10 @@ export class SiteCrawlerPhpwind extends SiteCrawler {
     let $form = $(`form`).filter((i, el) => {
       return el.attribs.action.indexOf('post.php') >= 0;
     });
-    let formData = await this.getFormData($form);
-    formData.append('atc_content', text);
+    let fdo = await this.getFormData($form);
+    fdo['atc_title'] = fdo['atc_title'].substr(0, 90);
+    fdo['atc_content'] = text;
+    let formData = toFormData(fdo);
     let res = await this.axiosInst.post(this.config.fullUrl(`/post.php`), formData, {
       headers: formData.getHeaders(),
     });

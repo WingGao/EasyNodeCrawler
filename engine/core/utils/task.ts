@@ -1,3 +1,5 @@
+import { sleep } from './time';
+
 let ignoreErrors = [
   'socket hang up',
   'Client network socket disconnected before secure TLS connection was established',
@@ -15,5 +17,6 @@ export async function runSafe(act: () => Promise<any>, onError: (Error) => Promi
       }
     }
     if (ok) break;
+    else await sleep(10 * 1000);
   }
 }

@@ -7,14 +7,16 @@ import { SpamRecord } from '../spam/model';
 import * as inquirer from 'inquirer';
 import _ = require('lodash');
 import { SiteConfig } from '../core/config';
+import Choice = require('inquirer/lib/objects/choice');
 
 abstract class BaseAction {
   cnf: SiteConfig;
   site: SiteCrawler;
   spam: SpamNormal;
-
+  otherAction: Array<Choice> = [];
   abstract init(): Promise<any>;
   async shui() {}
+  async onOtherAction(act: string) {}
   async start() {
     await initConfig('config/dev.yaml');
     await this.init();
@@ -29,7 +31,7 @@ abstract class BaseAction {
           { name: '获取链接', value: 'link' },
           { name: '获取详情', value: 'post' },
           { name: '灌水', value: 'shui' },
-        ],
+        ].concat(this.otherAction),
         default: 2,
       });
     } else {
@@ -46,6 +48,9 @@ abstract class BaseAction {
       case 'shui':
         await this.shui();
         break;
+      default:
+        await this.onOtherAction(ua.action);
+        return;
     }
   }
 }
