@@ -16,7 +16,7 @@ class SiteZxcsCrawler extends SiteCrawler {
     c.name = '知轩藏书';
     c.host = c.key;
     c.https = false;
-    c.savePageResult = true;
+    c.pageResultSave = true;
     c.ex.categorys = [
       // { id: '23', name: '都市·娱乐' },
       // { id: '25', name: '武侠·仙侠' },

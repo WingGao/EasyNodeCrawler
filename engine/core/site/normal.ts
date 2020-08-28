@@ -1,4 +1,4 @@
-import { MainConfig, SiteConfig, SiteType } from '../config';
+import { MainConfig, SiteCacheInfo, SiteConfig, SiteType } from '../config';
 import { getLogger, Logger } from 'log4js';
 import * as _ from 'lodash';
 import * as Crawler from 'crawler';
@@ -25,6 +25,7 @@ export abstract class SiteCrawler {
   axiosInst: AxiosInstance;
   queue: Queue;
   logger: Logger;
+  cache: SiteCacheInfo;
   private driver: WebDriver;
   lastReplyTime: number = 0; //最后回复时间
 
@@ -81,6 +82,11 @@ export abstract class SiteCrawler {
     this.logger.debug('init', config.name);
   }
 
+  async init() {
+    this.cache = new SiteCacheInfo();
+    await this.cache.load(this.config.key);
+  }
+
   abstract checkPermission($): boolean;
 
   async fetchPage(
@@ -115,21 +121,43 @@ export abstract class SiteCrawler {
   async startFindLinks(cates: any[], cnf: IPostParseConfig = {}) {
     for (let cate of cates) {
       this.logger.info('获取链接', JSON.stringify(cate));
+      let lastId = null;
       await this.loopCategory(
         cate.id,
         async (posts) => {
-          let ps: any = posts.map((v) => {
+          let ok = true;
+          let ps = [];
+          for (let p of posts) {
+            if (lastId == null) lastId = p.id; //获取最新的id
+            if (!ok) break;
+            if (this.config.pageResultCheck) {
+              //检查是否存在
+              if (await this.linkIsOld(p)) {
+                this.logger.info('增量检查到', p.id);
+                ok = false;
+                break;
+              }
+            }
             //添加到队列
-            return this.queueAddPost(v);
-          });
+            ps.push(this.queueAddPost(p));
+          }
           this.logger.info('添加任务', ps.length);
           await Promise.all(ps);
-          return true;
+          return ok;
         },
         cnf,
       );
+      //只有完成才获取
+      this.cache.cateLastMap[cate.id] = lastId;
+      await this.cache.save();
     }
     this.logger.info('获取post链接完毕');
+  }
+  // 判断是否已经获取到旧文章了，如果是，则应该停止爬取
+  async linkIsOld(p: Post): Promise<boolean> {
+    let last = this.cache.cateLastMap[p.categoryId];
+    if (last == null) return false;
+    else return parseInt(p.id) <= parseInt(last);
   }
 
   async getFormData($form) {
@@ -207,7 +235,7 @@ export abstract class SiteCrawler {
    * @param post
    */
   queueAddPost(post: Post) {
-    if (this.config.savePageResult) {
+    if (this.config.pageResultSave) {
       return post.save();
     }
     return this.queue.add('post', post, {

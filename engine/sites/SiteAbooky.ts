@@ -12,6 +12,7 @@ import _ = require('lodash');
 import SpamNormal from '../spam/site/normal';
 import { SpamRecord } from '../spam/model';
 import inquirer = require('inquirer');
+import BaseAction from './base';
 
 export default function getConfig() {
   let sc = new SiteConfig('www.abooky.com');
@@ -22,7 +23,7 @@ export default function getConfig() {
   sc.toZh = false;
   // sc.charset = 'gbk';
   sc.saveBody = 0;
-  sc.savePageResult = true;
+  sc.pageResultSave = true;
   sc.myUsername = 'shaziniu';
   sc.myUserId = '25248';
   sc.myReplyMaxPerPage = Math.ceil(20 / 5);
@@ -55,97 +56,66 @@ export default function getConfig() {
 }
 
 if (require.main === module) {
-  (async () => {
-    await initConfig('config/dev.yaml');
-    let cnf = getConfig();
-    let site = new SiteCrawlerDiscuz(cnf);
-    let spam = new SpamNormal(cnf, site);
-
-    let ua = await inquirer.prompt({
-      name: 'action',
-      type: 'rawlist',
-      message: '选择操作',
-      choices: [
-        { name: '获取链接', value: 'link' },
-        { name: '获取详情', value: 'post' },
-        { name: '灌水', value: 'shui' },
-      ],
-      default: 2,
-    });
-
-    switch (ua.action) {
-      case 'link': //爬取link
-        await site.startFindLinks(cnf.ex.categorys);
-        break;
-      case 'post':
-        site.startWorker();
-        break;
-      case 'shui':
-        //先签到
-        await site.checkin();
-        cnf.replyTimeSecond = 30;
-        await spam.shuiTask([
-          //投票
-          async () => {
-            if (await spam.isLimited('vote')) {
-              site.logger.info('vote上限');
-              return false;
-            }
-            return await spam.shuiCagegory('50', {
-              pageUrlExt: '&filter=specialtype&orderby=dateline&specialtype=poll',
-              onReply: async (p: Post) => {
-                await spam.doWithLimit('vote', async () => {
-                  return await site.replyVote(p);
-                });
-                return true;
-              },
-              beforeSave: (r: SpamRecord) => {
-                r.myLastReplyPage = 999;
-                return true;
-              },
-            });
-          },
-          async () => {
-            cnf.replyTimeSecond = (60 * 60) / 10; //1小时20帖
-            return false;
-          },
-          //二次元小说
-          () =>
-            spam.doWithLimit('reply', () =>
-              spam.shuiCagegory('38', {
-                checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
-                onReply: async (p: Post) => {
-                  let re = await spam.gerRandomReply(p, 2);
-                  return re == null ? null : re.body;
-                },
-              }),
-            ),
-          //灌水，不让发帖
-          // () =>
-          //   spam.doWithLimit('thread', () =>
-          //     spam.shuiCategoryPost('50', {
-          //       createExt: {
-          //         typeid: '27',
-          //       },
-          //     }),
-          //   ),
-        ]);
-        break;
+  let cnf = getConfig();
+  class A extends BaseAction {
+    async init(): Promise<any> {
+      this.cnf = cnf;
+      this.site = new SiteCrawlerDiscuz(cnf);
+      this.spam = new SpamNormal(cnf, this.site);
     }
-
-    // await site.checkCookie();
-    // await site.listCategory();
-    // await site.fetchPage(site.config.ex.categorys[0].id);
-    // await site.startFindLinks();
-    //
-    // let post = new Post();
-    // // post.site = site.config.host;
-    // // post.id = '241331';
-    // // post.url = '/forum.php?mod=viewthread&tid=241331';
-    // // //繁体
-    // post.id = '239842';
-    // post.url = '/forum.php?mod=viewthread&tid=239842';
-    // await site.fetchPost(post);
-    // site.startWorker();
-  })();
+    async shui() {
+      let spam = this.spam;
+      let site = this.site as SiteCrawlerDiscuz;
+      cnf.saveBody = 0;
+      await this.site.checkin();
+      cnf.replyTimeSecond = 30;
+      await spam.shuiTask([
+        //投票
+        async () => {
+          if (await spam.isLimited('vote')) {
+            site.logger.info('vote上限');
+            return false;
+          }
+          return await spam.shuiCagegory('50', {
+            pageUrlExt: '&filter=specialtype&orderby=dateline&specialtype=poll',
+            onReply: async (p: Post) => {
+              await spam.doWithLimit('vote', async () => {
+                return await site.replyVote(p);
+              });
+              return true;
+            },
+            beforeSave: (r: SpamRecord) => {
+              r.myLastReplyPage = 999;
+              return true;
+            },
+          });
+        },
+        async () => {
+          cnf.replyTimeSecond = (60 * 60) / 10; //1小时20帖
+          return false;
+        },
+        //二次元小说
+        () =>
+          spam.doWithLimit('reply', () =>
+            spam.shuiCagegory('38', {
+              checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
+              onReply: async (p: Post) => {
+                let re = await spam.gerRandomReply(p, 2);
+                return re == null ? null : re.body;
+              },
+            }),
+          ),
+        //灌水，不让发帖
+        // () =>
+        //   spam.doWithLimit('thread', () =>
+        //     spam.shuiCategoryPost('50', {
+        //       createExt: {
+        //         typeid: '27',
+        //       },
+        //     }),
+        //   ),
+      ]);
+    }
+  }
+  new A().start();
 }

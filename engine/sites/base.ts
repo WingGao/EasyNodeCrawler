@@ -20,6 +20,7 @@ abstract class BaseAction {
   async start() {
     await initConfig('config/dev.yaml');
     await this.init();
+    await this.site.init();
 
     let ua = { action: null };
     if (_.size(yargs.argv._) == 0) {

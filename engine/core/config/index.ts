@@ -8,6 +8,8 @@ import _ = require('lodash');
 import { Post } from '../post';
 import { getLogger } from 'log4js';
 import * as path from 'path';
+import ESClient, { EsModel } from '../es';
+import KVItem from '../model/kv';
 
 /**
  * 爬取站点的配置
@@ -30,7 +32,8 @@ export class SiteConfig {
   proxys?: IProxy[] = []; //代理，第一个是主代理
   toZh?: boolean = false; //转为简体
   saveBody?: 0 | 1 | 2 | 3 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
-  savePageResult?: boolean = false; //是否直接保存pagelist页面的结果（只保存标题，不注重内容）
+  pageResultSave?: boolean = false; //是否直接保存pagelist页面的结果（只保存标题，不注重内容）
+  pageResultCheck: boolean = true; //是否检查增量
   enableSave?: boolean = true; //是否开启保存
   myUsername?: string; //我的用户名，区分用户
   myUserId?: string;
@@ -113,4 +116,23 @@ export class LimitConfig {
   reply: number = -1; //回复次数
   thread: number = -1; //主题次数
   promotionVisit: number = -1; //访问推广
+}
+
+export class SiteCacheInfo {
+  site: string;
+  cateLastMap: { [key: string]: any } = {}; //对应增量标记
+  async load(siteKey: string) {
+    let kv = new KVItem(siteKey + '-cache');
+    kv = await kv.getById(kv.key);
+    if (kv != null) {
+      let ob = JSON.parse(kv.value);
+      _.merge(this, ob);
+    }
+    this.site = siteKey;
+    return true;
+  }
+  save() {
+    let kv = new KVItem(this.site + '-cache', JSON.stringify(this));
+    return kv.save();
+  }
 }

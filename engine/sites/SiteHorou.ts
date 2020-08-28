@@ -21,7 +21,7 @@ export default function getConfig() {
   sc.toZh = false;
   sc.charset = 'gbk';
   sc.saveBody = 0;
-  sc.savePageResult = true;
+  sc.pageResultSave = true;
   sc.myUsername = 'shaziniu1';
   sc.myUserId = '334371';
   sc.myReplyMaxPerPage = 8;

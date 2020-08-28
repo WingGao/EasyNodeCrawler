@@ -1,5 +1,5 @@
 import * as yargs from 'yargs';
-import { MainConfig, SiteConfig, SiteType } from './config';
+import { MainConfig, SiteCacheInfo, SiteConfig, SiteType } from './config';
 import path = require('path');
 import fs = require('fs');
 import ESClient from './es';
@@ -8,6 +8,7 @@ import Sites from '../sites';
 import * as _ from 'lodash';
 import { SiteCrawler, SiteCrawlerDiscuz } from './site';
 import { SpamRecord } from '../spam/model';
+import KVItem from './model/kv';
 
 async function main() {
   let argv = yargs
@@ -52,8 +53,9 @@ export async function initConfig(configPath) {
     MainConfig.logger().info('创建索引', post.indexName());
     let rep = await post._createIndex();
   }
-  let spamRec = new SpamRecord();
-  await spamRec.ensureIndex();
+  for (let r of [new SpamRecord(), new KVItem()]) {
+    await r.ensureIndex();
+  }
   return config;
 }
 

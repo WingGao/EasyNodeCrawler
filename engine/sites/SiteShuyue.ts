@@ -22,7 +22,7 @@ export default function getConfig() {
   sc.toZh = false;
   // sc.charset = 'gbk';
   sc.saveBody = 0;
-  sc.savePageResult = true;
+  sc.pageResultSave = true;
   sc.myUsername = 'shaziniu';
   sc.myUserId = '17874';
   sc.myReplyMaxPerPage = Math.ceil(20 / 5);
