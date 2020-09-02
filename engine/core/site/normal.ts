@@ -10,11 +10,12 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
-import { addCookie, runSafe, sleep } from '../utils';
+import { addCookie, execaCn, runSafe, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 import * as fs from 'fs';
 import cookies from '../../sites/cookie';
+import path = require('path');
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -37,6 +38,10 @@ export abstract class SiteCrawler {
       config.cookie = cookies[config.host].cookie;
     }
     this.config = config;
+    let cname = _.defaultTo(config.name, config.key);
+    this.logger = getLogger(`site:${cname}`);
+    this.logger.level = config.logLevel;
+    this.logger.debug('init', cname);
 
     let axc: AxiosRequestConfig = {
       baseURL: this.config.fullUrl(''),
@@ -58,8 +63,13 @@ export abstract class SiteCrawler {
         },
       ],
     };
+    //添加默认代理
+    if (_.size(config.proxys) == 0 && MainConfig.default().proxy) {
+      config.proxys = [MainConfig.default().proxy];
+    }
     // TODO 更好的代理轮训
     if (_.size(config.proxys) > 0) {
+      this.logger.info('使用代理', JSON.stringify(config.proxys));
       let p = config.proxys[0];
       switch (p.type) {
         case 'http':
@@ -85,9 +95,6 @@ export abstract class SiteCrawler {
         ...MainConfig.default().redis,
       },
     });
-    this.logger = getLogger(`site:${config.name}`);
-    this.logger.level = config.logLevel;
-    this.logger.debug('init', config.name);
   }
 
   async init() {
@@ -400,6 +407,40 @@ export abstract class SiteCrawler {
       fs.mkdirSync(this.config.tempPath);
     }
   }
+
+  // 下载文件
+  async download(furl: string, cnf: { desFile?: string; desDir?: string; createDir?: boolean } = {}) {
+    let { desFile } = cnf;
+    if (desFile == null) {
+      let fileName = _.last(furl.split('/'));
+      // let ext = _.last(fileName.split('.'));
+      desFile = path.resolve(_.defaultTo(cnf.desDir, this.config.tempPath), fileName); //rar文件
+    }
+    if (fs.existsSync(desFile)) {
+      this.logger.info(`download ${desFile} 已存在`);
+      return desFile;
+    }
+    if (cnf.createDir) {
+      //创建目录
+      let dir = path.dirname(desFile);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    }
+    let rep = await this.axiosInst.get(furl, {
+      responseType: 'stream',
+      transformResponse: (d) => d,
+    });
+    let d = rep.data.pipe(fs.createWriteStream(desFile, { emitClose: true }));
+    await new Promise((resolve) =>
+      d.on('close', () => {
+        resolve();
+      }),
+    );
+
+    this.logger.info(`download ${furl} ${desFile} 完成`);
+    return desFile;
+  }
 }
 
 export function createFromConfig(config: SiteConfig) {
@@ -407,4 +448,42 @@ export function createFromConfig(config: SiteConfig) {
   switch (config.siteType) {
   }
   return sc;
+}
+
+export class NormalCrawler extends SiteCrawler {
+  async checkCookie(): Promise<any> {
+    return true;
+  }
+
+  checkPermission($): boolean {
+    return true;
+  }
+
+  getPostListUrl(cateId, page?: number, ext?: string): string {
+    return '';
+  }
+
+  getPostUrl(pid, page?: number): string {
+    return '';
+  }
+
+  parsePage(
+    $: CheerioStatic,
+    cateId?,
+    html?: string,
+  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
+    return Promise.resolve({ $: undefined, pageMax: 0, posts: undefined });
+  }
+
+  async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post> {
+    return Promise.resolve(undefined);
+  }
+
+  async sendPost(cp: Post, ext?: any): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  async sendReply(post: Post, text: string): Promise<any> {
+    return Promise.resolve(undefined);
+  }
 }

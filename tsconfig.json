@@ -3,8 +3,10 @@
     "module": "commonjs",
     "target": "es5",
     "sourceMap": true,
+    "downlevelIteration": true,
     "lib": [
-      "ES2019"
+      "ES2019",
+      "es2020"
     ]
   },
   "exclude": [
