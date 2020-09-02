@@ -9,6 +9,7 @@ import * as _ from 'lodash';
 import { SiteCrawler, SiteCrawlerDiscuz } from './site';
 import { SpamRecord } from '../spam/model';
 import KVItem from './model/kv';
+import { BtSubItem, BtTorrent } from './site/bt/model';
 
 async function main() {
   let argv = yargs
@@ -37,8 +38,11 @@ async function main() {
   currentSite.start();
 }
 
-export async function initConfig(configPath) {
-  let config = MainConfig.loadYAML(path.resolve(configPath));
+export async function initConfig(configPath?) {
+  if (configPath == null) configPath = path.resolve(__dirname, '../../config/dev.yaml');
+  else configPath = path.resolve(configPath);
+  MainConfig.logger().info('加载配置', configPath);
+  let config = MainConfig.loadYAML(configPath);
   MainConfig.default(config);
   // 准备数据
   let esClient = ESClient.inst();
@@ -53,7 +57,7 @@ export async function initConfig(configPath) {
     MainConfig.logger().info('创建索引', post.indexName());
     let rep = await post._createIndex();
   }
-  for (let r of [new SpamRecord(), new KVItem()]) {
+  for (let r of [new SpamRecord(), new KVItem(), new BtTorrent(), new BtSubItem()]) {
     await r.ensureIndex();
   }
   return config;

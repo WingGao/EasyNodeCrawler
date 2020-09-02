@@ -1,6 +1,7 @@
 import { Client } from '@elastic/elasticsearch';
 import { MainConfig } from '../config';
 import _ = require('lodash');
+import { ApiResponse } from '@elastic/elasticsearch/lib/Transport';
 
 let mainClient: Client = null;
 export default class ESClient {
@@ -10,9 +11,23 @@ export default class ESClient {
     }
     return mainClient;
   }
+
+  static checkRep(rep: ApiResponse) {
+    if (rep.statusCode >= 200 && rep.statusCode < 300) {
+      return true;
+    }
+    //bulk
+    if (rep.body.errors) {
+      debugger;
+    }
+    throw new Error(rep.body.toString());
+  }
 }
 
 export abstract class EsModel {
+  constructor(props?) {
+    _.merge(this, props);
+  }
   abstract uniqId();
 
   abstract indexName();
@@ -37,13 +52,17 @@ export abstract class EsModel {
     }
   }
 
+  getBody() {
+    let body = _.pickBy(this, (v, k) => {
+      return k.indexOf('_') != 0 && v != undefined && !_.isFunction(v);
+    });
+    return body;
+  }
   /**
    * 全量更新
    */
   async save() {
-    let body = _.pickBy(this, (v, k) => {
-      return k.indexOf('_') != 0 && v != undefined;
-    });
+    let body = this.getBody();
     let pa = {
       index: this.indexName(),
       id: this.uniqId(),

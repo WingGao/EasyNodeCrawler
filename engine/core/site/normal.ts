@@ -14,6 +14,7 @@ import { addCookie, runSafe, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 import * as fs from 'fs';
+import cookies from '../../sites/cookie';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -31,8 +32,14 @@ export abstract class SiteCrawler {
   lastReplyTime: number = 0; //最后回复时间
 
   constructor(config: SiteConfig) {
+    // 获取默认cookie
+    if (config.cookie == null && cookies[config.host]) {
+      config.cookie = cookies[config.host].cookie;
+    }
     this.config = config;
+
     let axc: AxiosRequestConfig = {
+      baseURL: this.config.fullUrl(''),
       headers: _.merge(
         {
           'user-agent': MainConfig.default().userAgent,
@@ -134,8 +141,8 @@ export abstract class SiteCrawler {
             if (lastId == null) lastId = p.id; //获取最新的id
             if (!ok) break;
             if (this.config.pageResultCheck) {
-              //检查是否存在
-              if (await this.linkIsOld(p)) {
+              //检查是否存在,跳过置顶的检查
+              if (p._isTop != true && (await this.linkIsOld(p))) {
                 this.logger.info('增量检查到', p.id);
                 ok = false;
                 break;

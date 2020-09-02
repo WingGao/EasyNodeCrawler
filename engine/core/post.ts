@@ -29,6 +29,7 @@ export class Post extends EsModel {
   _html?: string;
   _imgs?: Array<string>;
   _ext?: any;
+  _isTop?: boolean;
   uniqId() {
     return `${this.site}-${this.id}`;
   }

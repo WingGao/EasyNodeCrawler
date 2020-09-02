@@ -1,4 +1,5 @@
 import { Builder, By, Key, until, WebDriver } from 'selenium-webdriver';
+import { URL } from 'url';
 
 export async function waitUntilLoad(driver) {
   await driver.wait(async () => {
