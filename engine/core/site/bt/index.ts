@@ -240,7 +240,8 @@ export class BtCrawler extends SiteCrawler {
       },
     });
     task.start();
-    // await task.wait();
+    await task.wait();
+    this.logger.info('startFetchFileInfos done');
   }
 
   async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post> {
@@ -254,6 +255,8 @@ export class BtCrawler extends SiteCrawler {
   async sendReply(post: Post, text: string): Promise<any> {
     return Promise.resolve(undefined);
   }
+  // 新的free种子
+  async watchFree() {}
 }
 
 async function main() {

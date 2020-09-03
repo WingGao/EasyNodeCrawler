@@ -1,10 +1,14 @@
 import genericPool = require('generic-pool');
-
+import AsyncLock = require('async-lock');
+import { EventEmitter } from 'events';
 class ResourceTask<T> {
   pool;
   onDo;
   resQueue = new genericPool.Deque();
   cnf;
+  lock = new AsyncLock();
+  event = new EventEmitter();
+
   constructor(cnf: {
     create?: () => Promise<Array<T>>;
     createIter?: AsyncIterable<T>;
@@ -27,7 +31,11 @@ class ResourceTask<T> {
   async getNextResource() {
     if (this.cnf.createIter) {
       let r = await this.cnf.createIter.next();
-      if (r.done) return null;
+      if (r.done) {
+        //完成
+        this.event.emit('done');
+        return null;
+      }
       return r.value;
     }
     if (this.resQueue == null) return;
@@ -54,16 +62,24 @@ class ResourceTask<T> {
 
   async createWorker() {
     let r: T = await this.pool.acquire();
-    if (r == null) return; //没了
+    if (r == null) {
+      return;
+    } //没了
     await this.onDo(r);
     //创建下一个
     this.createWorker();
     this.pool.destroy(r);
   }
 
-  async wait() {
-    await this.pool.drain();
-    await this.pool.clear();
+  wait() {
+    return new Promise((resolve) => {
+      this.event.once('done', () => {
+        this.pool.drain().then(() => {
+          this.pool.clear();
+        });
+        resolve();
+      });
+    });
   }
 }
 export default ResourceTask;
