@@ -22,6 +22,7 @@ export interface IPostParseConfig {
   pageUrlExt?: string;
   axConfig?: any;
   cachePrefix?: any; //1小时内判断是否遍历过
+  poolSize?: number;
 }
 export abstract class SiteCrawler {
   config: SiteConfig;

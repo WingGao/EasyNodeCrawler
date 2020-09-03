@@ -31,8 +31,8 @@ if (require.main === module) {
     crawler.logger.info('准备下载', dir);
     let pool = genericPool.createPool(
       {
-        create: () => new Date(),
-        destroy: () => 1,
+        create: () => new Date() as any,
+        destroy: () => 1 as any,
       },
       { max: 5 },
     );

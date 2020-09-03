@@ -11,6 +11,7 @@ import { BtSiteBaseConfig } from './sitecnf/base';
 import cheerio = require('cheerio');
 import ESClient from '../../es';
 import { Progress, runSafe } from '../../utils';
+import ResourceTask from '../../utils/resourceTask';
 
 export class BtCrawler extends SiteCrawler {
   btCnf: BtSiteBaseConfig;
@@ -168,6 +169,79 @@ export class BtCrawler extends SiteCrawler {
       );
     }
   }
+  async startFetchFileInfos2(cates) {
+    let b = new BtTorrent();
+    let pg = new Progress();
+    async function* resIter() {
+      for (let cate of cates) {
+        let scrollSearch = ESClient.inst().helpers.scrollSearch({
+          index: b.indexName(),
+          scroll: '10m',
+          body: {
+            size: 20,
+            sort: [
+              {
+                createTime: {
+                  order: 'desc',
+                },
+              },
+            ],
+            query: {
+              bool: {
+                must: {
+                  term: {
+                    categoryId: cate.id,
+                  },
+                },
+                must_not: {
+                  exists: {
+                    field: 'hasFiles',
+                  },
+                },
+              },
+            },
+          },
+        });
+        for await (const result of scrollSearch) {
+          if (pg.total == 0) pg.total = result.body.hits.total.value;
+          let bts = [];
+          for (let bt of result.body.hits.hits) {
+            let btv = new BtTorrent(bt._source);
+            // bts.push(bt);
+            yield btv;
+          }
+          // yield bts;
+        }
+      }
+    }
+    let task = new ResourceTask({
+      // create: () => ito.next() as any,
+      createIter: resIter(),
+      max: 2,
+      onDo: async (bt: BtTorrent) => {
+        await runSafe(
+          async () => {
+            let flist = await this.fetchSubItems(bt);
+            if (flist.length > 0) {
+              let bodys = flist.flatMap((x) => [{ index: { _index: x.indexName() }, _id: x.uniqId() }, x.getBody()]);
+              let createRep = await ESClient.inst().bulk({ body: bodys });
+              ESClient.checkRep(createRep);
+            }
+            bt.hasFiles = true;
+            await bt.save();
+            pg.incr();
+            this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+          },
+          async (e) => {
+            this.logger.error(e);
+            return false;
+          },
+        );
+      },
+    });
+    task.start();
+    // await task.wait();
+  }
 
   async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post> {
     return Promise.resolve(undefined);
@@ -201,7 +275,7 @@ async function main() {
   let cates = sc.torrentPages.map((v) => ({ id: v, name: v }));
   // await site.startFindLinks(sc.torrentPages.map((v) => ({ id: v, name: v })));
   // await site.startFetchFileInfos(cates);
-  await site.startFetchFileInfos([{ id: '/adult.php', name: '/adult.php' }]);
+  await site.startFetchFileInfos2([{ id: '/adult.php', name: '/adult.php' }]);
 }
 if (require.main === module) {
   main();
