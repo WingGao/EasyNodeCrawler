@@ -16,6 +16,7 @@ beforeAll(async () => {
   }
   testConfig = MTeamConfig;
   site = new BtCrawler(testConfig);
+  await site.init();
   jest.setTimeout(3 * 60 * 1000);
 });
 describe('bt', () => {
@@ -31,6 +32,16 @@ describe('bt', () => {
     p.tid = 426654;
     let res = await site.fetchSubItems(p);
     expect(res);
+  });
+  test('btPost', async () => {
+    let p = new BtTorrent();
+    p.tid = 426654;
+    let res = await site.fetchPost(p as any);
+    expect(p.hash).toEqual('e3374e621af2f5e4483115abcd5d520165b7d1c2');
+  });
+  test('watchFree', async () => {
+    let html = await site.watchFree();
+    expect(html.length).toBeGreaterThan(1);
   });
 
   test('x', () => {

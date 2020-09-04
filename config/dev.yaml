@@ -2,10 +2,10 @@ es:
   node: 'http://localhost:9200'
 
 redis:
-  host: 172.30.187.164
+  host: 172.19.32.119
   port: 6379
 
-wgwHost: 'http://127.0.0.1:7112'
+wgwHost: 'http://127.0.0.1:9010'
 
 userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0'
 proxy:

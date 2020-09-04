@@ -12,6 +12,7 @@ import cheerio = require('cheerio');
 import ESClient from '../../es';
 import { Progress, runSafe } from '../../utils';
 import ResourceTask from '../../utils/resourceTask';
+import WgwClient from '../../utils/wgw';
 
 export class BtCrawler extends SiteCrawler {
   btCnf: BtSiteBaseConfig;
@@ -38,8 +39,8 @@ export class BtCrawler extends SiteCrawler {
   }
 
   getPostUrl(pid, page?: number): string {
-    // return this.config.fullUrl(`/details.php?id=${pid}`);
-    return this.config.fullUrl(`//viewfilelist.php?id=${pid}`);
+    return this.config.fullUrl(`/details.php?id=${pid}`);
+    // return this.config.fullUrl(`//viewfilelist.php?id=${pid}`);
   }
 
   parsePage(
@@ -78,9 +79,11 @@ export class BtCrawler extends SiteCrawler {
       let ctimeT = $tds.eq(3).find('span').attr('title');
       torrent.createTime = new Date(ctimeT);
       let sizeT = $tds.eq(4).text().trim();
+      torrent._fsizeH = sizeT;
       torrent.fsize = bytes(sizeT);
       torrent.upNum = parseInt($tds.eq(5).text().trim());
       torrent._isTop = $tname.find('.sticky').length > 0;
+      torrent._isFree = $tname.find('.pro_free').length > 0 || $tname.find('.pro_free2up').length > 0;
       posts.push(torrent);
     });
     posts.sort((a, b) => b.tid - a.tid); //从大到小
@@ -111,64 +114,65 @@ export class BtCrawler extends SiteCrawler {
     return flist;
   }
 
-  async startFetchFileInfos(cates) {
-    let b = new BtTorrent();
-    for (let cate of cates) {
-      await runSafe(
-        async () => {
-          let scrollSearch = ESClient.inst().helpers.scrollSearch({
-            index: b.indexName(),
-            scroll: '10m',
-            body: {
-              size: 20,
-              sort: [
-                {
-                  createTime: {
-                    order: 'desc',
-                  },
-                },
-              ],
-              query: {
-                bool: {
-                  must: {
-                    term: {
-                      categoryId: cate.id,
-                    },
-                  },
-                  must_not: {
-                    exists: {
-                      field: 'hasFiles',
-                    },
-                  },
-                },
-              },
-            },
-          });
-          let pg = new Progress();
-          for await (const result of scrollSearch) {
-            if (pg.total == 0) pg.total = result.body.hits.total.value;
-            for (let bt of result.body.hits.hits) {
-              bt = new BtTorrent(bt._source);
-              let flist = await this.fetchSubItems(bt);
-              if (flist.length > 0) {
-                let bodys = flist.flatMap((x) => [{ index: { _index: x.indexName() }, _id: x.uniqId() }, x.getBody()]);
-                let createRep = await ESClient.inst().bulk({ body: bodys });
-                ESClient.checkRep(createRep);
-              }
-              bt.hasFiles = true;
-              await bt.save();
-              pg.incr();
-              this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
-            }
-          }
-        },
-        async (e) => {
-          this.logger.error(e);
-          return false;
-        },
-      );
-    }
-  }
+  // async startFetchFileInfos(cates) {
+  //   let b = new BtTorrent();
+  //   for (let cate of cates) {
+  //     await runSafe(
+  //       async () => {
+  //         let scrollSearch = ESClient.inst().helpers.scrollSearch({
+  //           index: b.indexName(),
+  //           scroll: '10m',
+  //           body: {
+  //             size: 20,
+  //             sort: [
+  //               {
+  //                 createTime: {
+  //                   order: 'desc',
+  //                 },
+  //               },
+  //             ],
+  //             query: {
+  //               bool: {
+  //                 must: {
+  //                   term: {
+  //                     categoryId: cate.id,
+  //                   },
+  //                 },
+  //                 must_not: {
+  //                   exists: {
+  //                     field: 'hasFiles',
+  //                   },
+  //                 },
+  //               },
+  //             },
+  //           },
+  //         });
+  //         let pg = new Progress();
+  //         for await (const result of scrollSearch) {
+  //           if (pg.total == 0) pg.total = result.body.hits.total.value;
+  //           for (let bt of result.body.hits.hits) {
+  //             bt = new BtTorrent(bt._source);
+  //             let flist = await this.fetchSubItems(bt);
+  //             if (flist.length > 0) {
+  //               let bodys = flist.flatMap((x) => [{ index: { _index: x.indexName() }, _id: x.uniqId() }, x.getBody()]);
+  //               let createRep = await ESClient.inst().bulk({ body: bodys });
+  //               ESClient.checkRep(createRep);
+  //             }
+  //             bt.hasFiles = true;
+  //             await bt.save();
+  //             pg.incr();
+  //             this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+  //           }
+  //         }
+  //       },
+  //       async (e) => {
+  //         this.logger.error(e);
+  //         return false;
+  //       },
+  //     );
+  //   }
+  // }
+  // 获取种子文件列表，目前只收集>100M的文件
   async startFetchFileInfos2(cates) {
     let b = new BtTorrent();
     let pg = new Progress();
@@ -244,8 +248,12 @@ export class BtCrawler extends SiteCrawler {
     this.logger.info('startFetchFileInfos done');
   }
 
-  async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post> {
-    return Promise.resolve(undefined);
+  async parsePost(post, $, pcf?: IPostParseConfig): Promise<Post> {
+    let bt = post as BtTorrent;
+    let $hash = $('#showfl').closest('tr').find('td').eq(1);
+    let hash = $hash.text().split(':')[1].trim();
+    bt.hash = hash;
+    return bt as any;
   }
 
   async sendPost(cp: Post, ext?: any): Promise<boolean> {
@@ -256,7 +264,44 @@ export class BtCrawler extends SiteCrawler {
     return Promise.resolve(undefined);
   }
   // 新的free种子
-  async watchFree() {}
+  async watchFree() {
+    await this.cache.load();
+    let oldCache = _.defaultTo(this.cache.other.freeMap, {});
+    let notifyHtml = ``;
+    let send = false;
+    for (let cate of this.btCnf.torrentPages) {
+      //第一页
+      await this.loopCategory(cate, async (posts) => {
+        // @ts-ignore
+        let bts = posts as Array<BtTorrent>;
+        let oldFreeList = _.defaultTo(oldCache[cate], []);
+        let newFreeList = _.filter(bts, (b) => b._isFree && oldFreeList.indexOf(b.tid) < 0);
+        notifyHtml += `<div><h3>${cate}</h3></div>`;
+        newFreeList.forEach((v) => {
+          send = true;
+          notifyHtml += `<div>
+<span>[${v.createTime.toLocaleString()}] ${v.title} [${v.title2}][${v._fsizeH}]</span><a href="${this.getPostUrl(
+            v.tid,
+          )}" target="_blank">[link]</a>
+</div>`;
+          oldFreeList.push(v.tid);
+        });
+        notifyHtml += '<hr>';
+        oldCache[cate] = oldFreeList;
+        return false;
+      });
+    }
+    this.cache.other.freeMap = oldCache;
+    await this.cache.save();
+    if (send) WgwClient.inst().sendMail(`[BT] ${this.btCnf.key} Free`, notifyHtml);
+    return notifyHtml;
+  }
+
+  async searchWeb(q: { hash?: string } = {}) {
+    if (q.hash) {
+      //搜索hash
+    }
+  }
 }
 
 async function main() {

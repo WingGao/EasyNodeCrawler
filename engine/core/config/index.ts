@@ -121,7 +121,9 @@ export class LimitConfig {
 export class SiteCacheInfo {
   site: string;
   cateLastMap: { [key: string]: any } = {}; //对应增量标记
-  async load(siteKey: string) {
+  other: { [key: string]: any } = {};
+  async load(siteKey?: string) {
+    if (siteKey == null) siteKey = this.site;
     let kv = new KVItem(siteKey + '-cache');
     kv = await kv.getById(kv.key);
     if (kv != null) {

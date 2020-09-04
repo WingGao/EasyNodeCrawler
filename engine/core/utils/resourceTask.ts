@@ -65,7 +65,9 @@ class ResourceTask<T> {
     if (r == null) {
       return;
     } //没了
+
     await this.onDo(r);
+
     //创建下一个
     this.createWorker();
     this.pool.destroy(r);

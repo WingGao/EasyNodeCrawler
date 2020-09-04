@@ -9,10 +9,12 @@ export class BtTorrent extends EsModel {
   title: string;
   title2: string; //副标题
   fsize: number; //种子大小
+  _fsizeH: string;
   createTime: Date; //创建日期
   hash: string;
   upNum: number; //上传数
   _isTop: boolean; //是否置顶
+  _isFree: boolean; //是否免费
   hasFiles: boolean; //知否处理过文件
 
   get id() {

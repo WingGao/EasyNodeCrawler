@@ -12,7 +12,7 @@ if (require.main === module) {
     let crawler = new NormalCrawler(cnf);
     await crawler.init();
     crawler.ensureTempDir();
-    let bookUrl = `http://18h.mm-cg.com/18H_7181.html`;
+    let bookUrl = `http://18h.mm-cg.com/18H_5741.html`;
     let rep = await crawler.axiosInst.get(bookUrl);
     let $ = cheerio.load(rep.data);
     let title = $('h1').text().trim();

@@ -266,10 +266,11 @@ export abstract class SiteCrawler {
   }
 
   // 专门解析post
-  abstract async parsePost(post: Post, $, pcf?: IPostParseConfig): Promise<Post>;
+  abstract async parsePost(post: Post, $: CheerioStatic, pcf?: IPostParseConfig): Promise<Post>;
 
   async fetchPost(post: Post, pcf?: IPostParseConfig) {
-    let rep = await this.axiosInst.get(this.config.fullUrl(post.url));
+    let purl = post.url ? this.config.fullUrl(post.url) : this.getPostUrl(post.id);
+    let rep = await this.axiosInst.get(purl);
     post = await this.parsePost(post, cheerio.load(rep.data), pcf);
     return post;
   }
