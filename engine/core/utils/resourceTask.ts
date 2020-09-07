@@ -1,6 +1,7 @@
 import genericPool = require('generic-pool');
 import AsyncLock = require('async-lock');
 import { EventEmitter } from 'events';
+class IsNull {}
 class ResourceTask<T> {
   pool;
   onDo;
@@ -12,6 +13,7 @@ class ResourceTask<T> {
   constructor(cnf: {
     create?: () => Promise<Array<T>>;
     createIter?: AsyncIterable<T>;
+    resourceArr?: Array<any>;
     max: number;
     onDo: (T) => Promise<any>;
   }) {
@@ -27,6 +29,14 @@ class ResourceTask<T> {
       },
     );
     this.onDo = cnf.onDo;
+    if (cnf.resourceArr) {
+      const autoNext = async function* () {
+        for (let item of cnf.resourceArr) {
+          yield item;
+        }
+      };
+      cnf.createIter = autoNext();
+    }
   }
   async getNextResource() {
     if (this.cnf.createIter) {
@@ -34,7 +44,7 @@ class ResourceTask<T> {
       if (r.done) {
         //完成
         this.event.emit('done');
-        return null;
+        return new IsNull();
       }
       return r.value;
     }
@@ -61,15 +71,16 @@ class ResourceTask<T> {
   }
 
   async createWorker() {
+    if (this.pool._draining) return;
     let r: T = await this.pool.acquire();
-    if (r == null) {
-      return;
-    } //没了
+    if (r instanceof IsNull) {
+      //没了
+    } else {
+      await this.onDo(r);
 
-    await this.onDo(r);
-
-    //创建下一个
-    this.createWorker();
+      //创建下一个
+      this.createWorker();
+    }
     this.pool.destroy(r);
   }
 
@@ -78,8 +89,8 @@ class ResourceTask<T> {
       this.event.once('done', () => {
         this.pool.drain().then(() => {
           this.pool.clear();
+          resolve();
         });
-        resolve();
       });
     });
   }

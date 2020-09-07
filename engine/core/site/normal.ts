@@ -414,9 +414,10 @@ export abstract class SiteCrawler {
   async download(furl: string, cnf: { desFile?: string; desDir?: string; createDir?: boolean } = {}) {
     let { desFile } = cnf;
     if (desFile == null) {
-      let fileName = _.last(furl.split('/'));
-      // let ext = _.last(fileName.split('.'));
-      desFile = path.resolve(_.defaultTo(cnf.desDir, this.config.tempPath), fileName); //rar文件
+      desFile = _.last(furl.split('/'));
+    }
+    if (!path.isAbsolute(desFile)) {
+      desFile = path.resolve(_.defaultTo(cnf.desDir, this.config.tempPath), desFile);
     }
     if (fs.existsSync(desFile)) {
       this.logger.info(`download ${desFile} 已存在`);
@@ -433,12 +434,17 @@ export abstract class SiteCrawler {
       responseType: 'stream',
       transformResponse: (d) => d,
     });
-    let d = rep.data.pipe(fs.createWriteStream(desFile, { emitClose: true }));
+    let tmpFile = desFile + '.tmp';
+    if (fs.existsSync(tmpFile)) {
+      fs.unlinkSync(tmpFile);
+    }
+    let d = rep.data.pipe(fs.createWriteStream(tmpFile, { emitClose: true }));
     await new Promise((resolve) =>
       d.on('close', () => {
         resolve();
       }),
     );
+    fs.renameSync(tmpFile, desFile);
 
     this.logger.info(`download ${furl} ${desFile} 完成`);
     return desFile;

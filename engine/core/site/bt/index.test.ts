@@ -7,9 +7,12 @@ import { BtCrawler } from './index';
 import { BtSiteBaseConfig } from './sitecnf/base';
 import { Post } from '../../post';
 import { BtSubItem, BtTorrent } from './model';
+import ESClient from '../../es';
 
 let testConfig: BtSiteBaseConfig;
 let site: BtCrawler;
+let btMod = new BtTorrent();
+let subMod = new BtSubItem();
 beforeAll(async () => {
   if (MainConfig.default() == null) {
     await initConfig();
@@ -17,7 +20,7 @@ beforeAll(async () => {
   testConfig = MTeamConfig;
   site = new BtCrawler(testConfig);
   await site.init();
-  jest.setTimeout(3 * 60 * 1000);
+  jest.setTimeout(30 * 60 * 1000);
 });
 describe('bt', () => {
   test('init', async () => {
@@ -44,6 +47,14 @@ describe('bt', () => {
     expect(html.length).toBeGreaterThan(1);
   });
 
+  test('findSimilarTorrent-file', async () => {
+    let r = await site.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
+  });
+
+  test('downloadFile', async () => {
+    let r = await site.downloadBtFile(401297);
+  });
+
   test('x', () => {
     let a = {
       cateLastMap: {
@@ -55,4 +66,6 @@ describe('bt', () => {
     };
     console.log(JSON.stringify({ a: JSON.stringify(a) }));
   });
+
+  test('fix', async () => {});
 });

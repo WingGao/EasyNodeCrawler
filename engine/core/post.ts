@@ -6,7 +6,7 @@ import { MainConfig } from './config';
 // import brotli = require('brotli');
 import _ = require('lodash');
 
-export class Post extends EsModel {
+export class Post extends EsModel<Post> {
   site: string; //站点的host
   id: string;
   url: string; //相对路径

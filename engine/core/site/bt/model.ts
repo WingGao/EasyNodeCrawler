@@ -2,7 +2,7 @@ import ESClient, { EsModel } from '../../es';
 import { MainConfig } from '../../config';
 import crypto = require('crypto');
 
-export class BtTorrent extends EsModel {
+export class BtTorrent extends EsModel<BtTorrent> {
   tid: number; //种子id
   site: string;
   categoryId: string;
@@ -16,6 +16,8 @@ export class BtTorrent extends EsModel {
   _isTop: boolean; //是否置顶
   _isFree: boolean; //是否免费
   hasFiles: boolean; //知否处理过文件
+  hasBt: boolean; //是否处理过种子
+  deleteAt?: Date;
 
   get id() {
     return this.tid;
@@ -34,9 +36,11 @@ export class BtTorrent extends EsModel {
             title2: { type: 'text', analyzer: 'ik_max_word', search_analyzer: 'ik_smart' },
             fsize: { type: 'long' },
             createTime: { type: 'date' },
+            deleteAt: { type: 'date' },
             hash: { type: 'keyword' },
             upNum: { type: 'integer' },
             hasFiles: { type: 'boolean' },
+            hasBt: { type: 'boolean' },
           },
         },
       },
@@ -45,6 +49,9 @@ export class BtTorrent extends EsModel {
   }
 
   indexName() {
+    return BtTorrent.indexName;
+  }
+  static get indexName() {
     return `${MainConfig.default().dataPrefix}bt_torrent`;
   }
 
@@ -59,12 +66,17 @@ export class BtTorrent extends EsModel {
 /**
  * 每个种子里的成员文件，用于拆包
  */
-export class BtSubItem extends EsModel {
+export class BtSubItem extends EsModel<BtSubItem> {
   site: string;
   tid: number; //种子id
   fname: string; //文件名称
-  fsize: number;
-  hashs?: Array<any>;
+  fsize: number; //网页上的数值，非精确
+  fsizeExact: number; //精确文件大小
+  hashs?: {
+    offset: number; //起始位置byte
+    pieceLength: number; //piece大小byte
+    pieces: Array<IFileHashPiece>;
+  };
   _fsizeH: string;
   async _createIndex(): Promise<boolean> {
     let res = await ESClient.inst().indices.create({
@@ -76,6 +88,7 @@ export class BtSubItem extends EsModel {
             tid: { type: 'integer' },
             fname: { type: 'keyword' },
             fsize: { type: 'long' },
+            fsizeExact: { type: 'long' },
             hashs: { type: 'nested' },
           },
         },
@@ -84,8 +97,12 @@ export class BtSubItem extends EsModel {
     return true;
   }
 
-  indexName() {
+  static get indexName() {
     return `${MainConfig.default().dataPrefix}bt_sub_item`;
+  }
+
+  indexName() {
+    return BtSubItem.indexName;
   }
 
   newOne() {
@@ -97,4 +114,9 @@ export class BtSubItem extends EsModel {
     ag.update(this.fname);
     return `${this.site}-${this.tid}-${ag.digest().toString('hex').substr(0, 10)}`;
   }
+}
+
+export interface IFileHashPiece {
+  i: number; //起始位置
+  hash: string;
 }

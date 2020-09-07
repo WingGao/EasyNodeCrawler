@@ -24,10 +24,11 @@ export default class ESClient {
   }
 }
 
-export abstract class EsModel {
+export abstract class EsModel<T> {
   constructor(props?) {
     _.merge(this, props);
   }
+
   abstract uniqId();
 
   abstract indexName();
@@ -36,7 +37,12 @@ export abstract class EsModel {
 
   abstract _createIndex(): Promise<boolean>;
 
-  async getById(id: string) {
+  async loadById() {
+    let id = this.uniqId();
+    return this.getById(id, true);
+  }
+
+  async getById(id: string, load = false) {
     let res = await ESClient.inst()
       .get({
         index: this.indexName(),
@@ -45,8 +51,12 @@ export abstract class EsModel {
       .catch((e) => e);
 
     if (res.statusCode == 200) {
-      let p = this.newOne();
-      return _.merge(p, res.body._source);
+      if (load) {
+        return _.merge(this, res.body._source);
+      } else {
+        let p = this.newOne();
+        return _.merge(p, res.body._source);
+      }
     } else {
       return null;
     }
@@ -58,6 +68,7 @@ export abstract class EsModel {
     });
     return body;
   }
+
   /**
    * 全量更新
    */
@@ -84,6 +95,19 @@ export abstract class EsModel {
         default:
           throw res;
       }
+    }
+  }
+
+  async update(p: Partial<T>) {
+    let res = await ESClient.inst().update({
+      index: this.indexName(),
+      id: this.uniqId(),
+      body: { doc: p },
+    });
+    if (res.statusCode == 200) {
+      _.merge(this, p);
+    } else {
+      throw new Error(res.body.result);
     }
   }
 

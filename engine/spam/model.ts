@@ -6,7 +6,7 @@ import { MainConfig } from '../core/config';
 import brotli = require('brotli');
 import _ = require('lodash');
 
-export class SpamRecord extends EsModel {
+export class SpamRecord extends EsModel<SpamRecord> {
   site: string; //站点的host
   pid: string; //帖子id
   categoryId: string;
