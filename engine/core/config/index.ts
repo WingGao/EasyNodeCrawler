@@ -89,6 +89,10 @@ export class MainConfig {
   wgwHost?: string = 'https://wgw.suamo.art';
   userAgent: string = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:78.0) Gecko/20100101 Firefox/78.0';
   proxy?: IProxy;
+  http: {
+    port: number;
+  };
+
   static default(c?: MainConfig) {
     if (c != null) {
       defaultConfig = c;

@@ -15,13 +15,13 @@ import ResourceTask from '../../utils/resourceTask';
 import WgwClient from '../../utils/wgw';
 import parseTorrent = require('parse-torrent');
 import fs = require('fs');
-import stringSimilarity = require('string-similarity');
+
 import cookies from '../../../sites/cookie';
 import * as path from 'path';
 
 export class BtCrawler extends SiteCrawler {
   btCnf: BtSiteBaseConfig;
-  minFileSize: number;
+  static minFileSize = 100 * 1024 * 1024;
   passkey: string;
   downloadThread: number;
 
@@ -33,7 +33,6 @@ export class BtCrawler extends SiteCrawler {
     scnf.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
     super(scnf);
     this.btCnf = cnf;
-    this.minFileSize = 100 * 1024 * 1024; //100M
     this.passkey = _.get(cookies[cnf.host], 'passkey');
     this.downloadThread = 3;
   }
@@ -124,7 +123,7 @@ export class BtCrawler extends SiteCrawler {
       sb._fsizeH = $tds.eq(1).text().trim();
       sb.fsize = bytes(sb._fsizeH);
       // 只添加>100M的
-      if (sb.fsize > this.minFileSize) {
+      if (sb.fsize > BtCrawler.minFileSize) {
         flist.push(sb);
       }
     });
@@ -331,101 +330,10 @@ export class BtCrawler extends SiteCrawler {
     }
   }
 
-  /**
-   * 找相同文件的种子
-   * @param q
-   */
-  async findSimilarTorrent(q: { btPath?: string }) {
-    let subMod = new BtSubItem();
-    let tInfo;
-    if (q.btPath) {
-      tInfo = parseTorrent(fs.readFileSync(q.btPath));
-    }
-    let matchedBtMap = {};
-    for (let f of tInfo.files) {
-      if (f.length < this.minFileSize) continue;
-      let fSize = bytes(f.length); // 先和网页数值对齐
-      fSize = bytes(fSize); //再转换
-      // console.log(f.name, fSize);
-      // continue;
-      this.logger.info('比对文件', f.name);
-      // if (f.name.indexOf('IPX-098.mp4') >= 0) {
-      let reDo = false;
-      do {
-        reDo = false;
-        let res = await ESClient.inst().search({
-          index: subMod.indexName(),
-          size: 10000,
-          body: {
-            query: {
-              term: {
-                fsize: fSize,
-              },
-            },
-          },
-        });
-        let subList = _.map(res.body.hits.hits, (v) => {
-          let s = new BtSubItem(v._source);
-          // @ts-ignore
-          // s._d = levenshtein.get(f.path, s.fname);
-          return s;
-        });
-        subList = _.sortBy(subList, (v: any) => {
-          v._d = stringSimilarity.compareTwoStrings(f.path.toLowerCase(), v.fname.toLowerCase());
-          return -v._d;
-        });
-        if (subList.length > 200) {
-          subList = _.filter(subList, (v) => (v as any)._d > 0.15);
-        }
-        this.logger.info('相似文件', subList.length);
-        let toFixTids = {};
-        for (let sub of subList) {
-          if (sub.fsizeExact == null) {
-            toFixTids[sub.tid] = 1;
-            // 查询具体结果
-          } else {
-            if (sub.fsizeExact == f.length) {
-              //大概率是同文件
-              let mat = _.defaultTo(matchedBtMap[sub.tid], 0);
-              mat += sub.fsizeExact;
-              matchedBtMap[sub.tid] = mat;
-            }
-          }
-        }
-        if (_.size(toFixTids) > 0) {
-          reDo = true;
-          let tids = _.keys(toFixTids);
-          let pg = new Progress(tids.length);
-          let mp = new ResourceTask({
-            resourceArr: tids,
-            max: this.downloadThread,
-            onDo: async (tid) => {
-              this.logger.info('下载文件', pg.fmt());
-              await this.downloadBtFile(parseInt(tid));
-              pg.incr();
-            },
-          });
-          mp.start();
-          await mp.wait();
-        }
-      } while (reDo);
-      // }
-    }
-
-    let items = _.map(matchedBtMap, (v, k) => {
-      return {
-        tid: k,
-        score: v,
-      };
-    });
-    items = _.sortBy(items, (v) => -v.score);
-    debugger;
-  }
-
   async downloadBtFile(tid: number) {
     let furl = this.config.fullUrl(`/download.php?id=${tid}&passkey=${this.passkey}&https=1`);
     let dFile = await this.download(furl, { desFile: `${this.btCnf.key}-${tid}.torrent` }).catch(async (e) => {
-      if (e.response.status == 404) {
+      if (e.response && e.response.status == 404) {
         this.logger.error('未找到', furl);
         //删除种子信息
         let bt = new BtTorrent();
@@ -445,12 +353,15 @@ export class BtCrawler extends SiteCrawler {
           });
           debugger;
         }
+      } else {
+        throw e;
       }
     });
     if (dFile == null) {
       return;
     }
     await this.fixBtData(tid, dFile as any);
+    return dFile;
   }
 
   // 修复数据
@@ -476,7 +387,7 @@ export class BtCrawler extends SiteCrawler {
         if (_.size(tInfo.files) > 0) {
           //多文件
           let bodys = tInfo.files.flatMap((x) => {
-            if (x.length < this.minFileSize) return [];
+            if (x.length < BtCrawler.minFileSize) return [];
             let sub = new BtSubItem();
             sub.tid = bt.tid;
             sub.site = bt.site;
@@ -539,7 +450,7 @@ export class BtCrawler extends SiteCrawler {
 //   return number_format($bytes / 1125899906842624, 3) . " PB";
 // }
 
-async function fix(site: BtCrawler) {
+async function fix1(site: BtCrawler) {
   let rep = await ESClient.inst().search({
     index: BtSubItem.indexName,
     size: 5000,
@@ -583,7 +494,7 @@ async function main() {
   });
   let ua;
   if (true) {
-    ua.site = choices[0];
+    ua = { site: choices[0].value };
   } else {
     ua = await inquirer.prompt({
       name: 'site',
@@ -596,9 +507,7 @@ async function main() {
   let site = new BtCrawler(sc);
   await site.init();
   let cates = sc.torrentPages.map((v) => ({ id: v, name: v }));
-  await fix(site);
-  let r = await site.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-  return;
+
   await site.startFindLinks(sc.torrentPages.map((v) => ({ id: v, name: v })));
   // await site.startFetchFileInfos(cates);
   await site.startFetchFileInfos2([{ id: '/adult.php', name: '/adult.php' }]);

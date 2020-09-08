@@ -25,7 +25,7 @@ export default class ESClient {
 }
 
 export abstract class EsModel<T> {
-  constructor(props?) {
+  constructor(props?: Partial<T>) {
     _.merge(this, props);
   }
 
@@ -37,8 +37,8 @@ export abstract class EsModel<T> {
 
   abstract _createIndex(): Promise<boolean>;
 
-  async loadById() {
-    let id = this.uniqId();
+  async loadById(id?) {
+    if (id == null) id = this.uniqId();
     return this.getById(id, true);
   }
 

@@ -1,6 +1,8 @@
 import genericPool = require('generic-pool');
 import AsyncLock = require('async-lock');
 import { EventEmitter } from 'events';
+import { runSafe } from './task';
+import { sleep } from './time';
 class IsNull {}
 class ResourceTask<T> {
   pool;
@@ -16,6 +18,7 @@ class ResourceTask<T> {
     resourceArr?: Array<any>;
     max: number;
     onDo: (T) => Promise<any>;
+    retry?: boolean;
   }) {
     this.cnf = cnf;
     this.pool = genericPool.createPool(
@@ -76,7 +79,14 @@ class ResourceTask<T> {
     if (r instanceof IsNull) {
       //没了
     } else {
-      await this.onDo(r);
+      if (this.cnf.retry) {
+        // await runSafe(
+        //   () => this.onDo(r),
+        //   (e) => true,
+        // );
+      } else {
+        await this.onDo(r);
+      }
 
       //创建下一个
       this.createWorker();
@@ -86,10 +96,12 @@ class ResourceTask<T> {
 
   wait() {
     return new Promise((resolve) => {
-      this.event.once('done', () => {
-        this.pool.drain().then(() => {
-          this.pool.clear();
-          resolve();
+      sleep(1000).then(() => {
+        this.event.once('done', () => {
+          this.pool.drain().then(() => {
+            this.pool.clear();
+            resolve();
+          });
         });
       });
     });
