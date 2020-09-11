@@ -8,7 +8,7 @@ async function cron() {
   let tasks = [];
   tasks.push(
     new CronJob(
-      '0 22 * * * *',
+      '0 39 * * * *',
       async (done) => {
         MainConfig.logger().info('开始 mteam free');
         let btCnf = MTeamConfig;

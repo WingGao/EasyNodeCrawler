@@ -47,10 +47,6 @@ describe('bt', () => {
     expect(html.length).toBeGreaterThan(1);
   });
 
-  test('findSimilarTorrent-file', async () => {
-    let r = await site.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-  });
-
   test('downloadFile', async () => {
     let r = await site.downloadBtFile(401297);
   });

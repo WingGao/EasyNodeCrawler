@@ -3,6 +3,7 @@ import AsyncLock = require('async-lock');
 import { EventEmitter } from 'events';
 import { runSafe } from './task';
 import { sleep } from './time';
+import { MainConfig } from '../config';
 class IsNull {}
 class ResourceTask<T> {
   pool;
@@ -80,10 +81,13 @@ class ResourceTask<T> {
       //没了
     } else {
       if (this.cnf.retry) {
-        // await runSafe(
-        //   () => this.onDo(r),
-        //   (e) => true,
-        // );
+        await runSafe(
+          () => this.onDo(r),
+          async (e) => {
+            MainConfig.logger().error('ResourceTask-do', e);
+            return false;
+          },
+        );
       } else {
         await this.onDo(r);
       }
@@ -96,8 +100,9 @@ class ResourceTask<T> {
 
   wait() {
     return new Promise((resolve) => {
-      sleep(1000).then(() => {
-        this.event.once('done', () => {
+      this.event.once('done', () => {
+        sleep(1000).then(() => {
+          //滞后
           this.pool.drain().then(() => {
             this.pool.clear();
             resolve();

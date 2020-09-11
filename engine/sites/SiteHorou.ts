@@ -11,6 +11,7 @@ import SpamDiscuz from '../spam/site/discuz';
 import _ = require('lodash');
 import SpamNormal from '../spam/site/normal';
 import BaseAction from './base';
+import cheerio = require('cheerio');
 
 export default function getConfig() {
   let sc = new SiteConfig('www.horou.com');
@@ -56,6 +57,7 @@ if (require.main === module) {
       cnf.saveBody = 0;
       cnf.replyTimeSecond = (60 * 60) / 20; //1小时15帖
       await this.site.checkin();
+      await this.task(27); //潜水
       await this.spam.shuiTask([
         //河洛茶馆
         () =>
@@ -70,6 +72,14 @@ if (require.main === module) {
           ),
       ]);
     }
+    // 接任务
+    async task(tid) {
+      let rep = await this.site.axiosInst.get(`/home.php?mod=task&do=apply&id=${tid}`);
+      let $ = cheerio.load(rep.data);
+      this.site.logger.info('任务', tid, $('#messagetext').text().trim());
+      // return rep.data;
+    }
   }
+
   new A().start();
 }

@@ -102,6 +102,7 @@ export class BtMain {
           let mp = new ResourceTask({
             resourceArr: bts,
             max: this.downloadThread,
+            retry: true,
             onDo: async (b: BtTorrent) => {
               this.logger.info('下载文件', pg.fmt());
               let site = this.sites[b.site];

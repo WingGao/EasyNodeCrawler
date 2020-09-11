@@ -2,7 +2,7 @@ import { IPostParseConfig, SiteCrawler } from '../normal';
 import { Post } from '../../post';
 import { initConfig } from '../../index';
 import * as inquirer from 'inquirer';
-import { SiteConfig } from '../../config';
+import { MainConfig, SiteConfig } from '../../config';
 import _ = require('lodash');
 import { BtSubItem, BtTorrent, IFileHashPiece } from './model';
 import bytes = require('bytes');
@@ -18,6 +18,7 @@ import fs = require('fs');
 
 import cookies from '../../../sites/cookie';
 import * as path from 'path';
+import * as yargs from 'yargs';
 
 export class BtCrawler extends SiteCrawler {
   btCnf: BtSiteBaseConfig;
@@ -67,7 +68,7 @@ export class BtCrawler extends SiteCrawler {
   ): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
     let $form = $('#form_torrent');
     // 获取页数
-    let $pages = $form.find('>p a');
+    let $pages = $('.torrents').siblings('p').find('a');
     let pageMax = 0;
     $pages.each((i, v) => {
       let page = parseInt(/page=(\d+)/.exec(v.attribs.href)[1]);
@@ -84,8 +85,8 @@ export class BtCrawler extends SiteCrawler {
       torrent.site = this.btCnf.key;
       let $tds = $tr.find('>td');
       let $tname = $tr.find('.torrentname');
-      let $tdName = $tname.find('td').eq(1);
-      let $a = $tdName.find('>a');
+      let $tdName = $tname.find('td.embedded').eq(0);
+      let $a = $tname.find('a').filter((j, x) => _.get(x.attribs, 'href').indexOf('details.php') >= 0);
       torrent.tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
       torrent.title = $a.text().trim();
       $a.remove();
@@ -190,7 +191,7 @@ export class BtCrawler extends SiteCrawler {
   // }
   // 获取种子文件列表，目前只收集>100M的文件
   async startFetchFileInfos2(cates) {
-    let b = new BtTorrent();
+    let b = new BtTorrent({ site: this.btCnf.key });
     let pg = new Progress();
 
     async function* resIter() {
@@ -209,16 +210,26 @@ export class BtCrawler extends SiteCrawler {
             ],
             query: {
               bool: {
-                must: {
-                  term: {
-                    categoryId: cate.id,
+                must: [
+                  { term: { site: b.site } },
+                  {
+                    term: {
+                      categoryId: cate.id,
+                    },
                   },
-                },
-                must_not: {
-                  exists: {
-                    field: 'hasFiles',
+                ],
+                must_not: [
+                  {
+                    exists: {
+                      field: 'hasBt',
+                    },
                   },
-                },
+                  {
+                    exists: {
+                      field: 'deleteAt',
+                    },
+                  },
+                ],
               },
             },
           },
@@ -239,28 +250,30 @@ export class BtCrawler extends SiteCrawler {
     let task = new ResourceTask({
       // create: () => ito.next() as any,
       createIter: resIter(),
-      max: 2,
+      max: this.downloadThread,
       onDo: async (bt: BtTorrent) => {
         await runSafe(
           async () => {
-            let flist = await this.fetchSubItems(bt);
-            if (flist.length > 0) {
-              let bodys = flist.flatMap((x) => [
-                {
-                  index: {
-                    _index: x.indexName(),
-                    _id: x.uniqId(),
-                  },
-                },
-                x.getBody(),
-              ]);
-              let createRep = await ESClient.inst().bulk({ body: bodys });
-              ESClient.checkRep(createRep);
-            }
-            bt.hasFiles = true;
-            await bt.save();
+            await this.downloadBtFile(bt.tid);
+            // let flist = await this.fetchSubItems(bt);
+            // if (flist.length > 0) {
+            //   let bodys = flist.flatMap((x) => [
+            //     {
+            //       index: {
+            //         _index: x.indexName(),
+            //         _id: x.uniqId(),
+            //       },
+            //     },
+            //     x.getBody(),
+            //   ]);
+            //   let createRep = await ESClient.inst().bulk({ body: bodys });
+            //   ESClient.checkRep(createRep);
+            // }
+            // bt.hasFiles = true;
+            // await bt.save();
+            // this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+            this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
             pg.incr();
-            this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
           },
           async (e) => {
             this.logger.error(e);
@@ -302,19 +315,21 @@ export class BtCrawler extends SiteCrawler {
         // @ts-ignore
         let bts = posts as Array<BtTorrent>;
         let oldFreeList = _.defaultTo(oldCache[cate], []);
-        let newFreeList = _.filter(bts, (b) => b._isFree && oldFreeList.indexOf(b.tid) < 0);
+        let nextList = _.filter(bts, (b) => b._isFree || b._isTop);
+        let newFreeList = _.filter(nextList, (b) => oldFreeList.indexOf(b.tid) < 0);
+        this.logger.info('找到新的', newFreeList.length);
         notifyHtml += `<div><h3>${cate}</h3></div>`;
         newFreeList.forEach((v) => {
           send = true;
           notifyHtml += `<div>
-<span>[${v.createTime.toLocaleString()}] ${v.title} [${v.title2}][${v._fsizeH}]</span><a href="${this.getPostUrl(
-            v.tid,
-          )}" target="_blank">[link]</a>
+<span>[${v.createTime.toLocaleString()}]</span>
+${v._isTop ? `<span style="color: #7189d9">[Top]</span>` : ''}
+${v._isFree ? `<span style="color: #0034ce">[Free]</span>` : ''}
+${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target="_blank">[link]</a>
 </div>`;
-          oldFreeList.push(v.tid);
         });
         notifyHtml += '<hr>';
-        oldCache[cate] = oldFreeList;
+        oldCache[cate] = _.map(nextList, (v) => v.tid);
         return false;
       });
     }
@@ -351,7 +366,7 @@ export class BtCrawler extends SiteCrawler {
               },
             },
           });
-          debugger;
+          // debugger;
         }
       } else {
         throw e;
@@ -360,7 +375,15 @@ export class BtCrawler extends SiteCrawler {
     if (dFile == null) {
       return;
     }
-    await this.fixBtData(tid, dFile as any);
+    await this.fixBtData(tid, dFile as string).catch((e) => {
+      if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
+        //种子文件有问题重新下载
+        this.logger.error('种子文件错误', dFile);
+        fs.unlinkSync(dFile as string);
+      }
+      throw e;
+      // debugger;
+    });
     return dFile;
   }
 
@@ -422,8 +445,10 @@ export class BtCrawler extends SiteCrawler {
             }
             return [{ index: { _index: sub.indexName(), _id: sub.uniqId() } }, sub.getBody()];
           });
-          let createRep = await ESClient.inst().bulk({ body: bodys });
-          ESClient.checkRep(createRep);
+          if (bodys.length > 0) {
+            let createRep = await ESClient.inst().bulk({ body: bodys });
+            ESClient.checkRep(createRep);
+          }
         } else {
           debugger;
         }
@@ -486,31 +511,71 @@ async function fix1(site: BtCrawler) {
 
 async function main() {
   await initConfig();
-  let choices = getSiteConfigs().map((v) => {
+  let siteChoices = getSiteConfigs().map((v) => {
     return {
       name: v.key,
       value: v,
     };
   });
   let ua;
-  if (true) {
-    ua = { site: choices[0].value };
+  let argv = yargs.argv;
+  if (argv.site) {
+    /**
+     * --site=nicept --act=list
+     */
+    ua = {
+      site: _.find(siteChoices, (v) => v.name == argv.site).value,
+      act: argv.act,
+    };
   } else {
-    ua = await inquirer.prompt({
-      name: 'site',
-      type: 'rawlist',
-      message: '选择站点',
-      choices,
-    });
+    ua = await inquirer.prompt([
+      {
+        name: 'site',
+        type: 'rawlist',
+        message: '选择站点',
+        choices: siteChoices,
+      },
+      {
+        name: 'act',
+        type: 'rawlist',
+        message: '操作',
+        choices: [
+          { name: '爬取列表', value: 'list' },
+          { name: '爬取种子', value: 'file' },
+        ],
+      },
+    ]);
   }
   let sc = ua.site;
   let site = new BtCrawler(sc);
   await site.init();
   let cates = sc.torrentPages.map((v) => ({ id: v, name: v }));
-
-  await site.startFindLinks(sc.torrentPages.map((v) => ({ id: v, name: v })));
+  switch (ua.act) {
+    case 'list':
+      await site.startFindLinks(cates);
+      break;
+    case 'file':
+      let { doCates } = argv;
+      let doChoices = [{ name: 'all', value: cates }, ...cates.map((v) => ({ name: v.id, value: [v] }))];
+      if (doCates) {
+        doCates = _.find(doChoices, (v) => v.name == doCates).value;
+      } else {
+        let r = await inquirer.prompt({
+          name: 'doCates',
+          type: 'rawlist',
+          message: '爬取目录',
+          choices: doChoices,
+        });
+        doCates = r.doCates;
+      }
+      await site.startFetchFileInfos2(doCates);
+      break;
+    default:
+      MainConfig.logger().error('不支持的act');
+      break;
+  }
+  //
   // await site.startFetchFileInfos(cates);
-  await site.startFetchFileInfos2([{ id: '/adult.php', name: '/adult.php' }]);
 }
 
 if (require.main === module) {
