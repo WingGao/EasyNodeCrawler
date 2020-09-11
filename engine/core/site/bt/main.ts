@@ -25,19 +25,21 @@ export class BtMain {
   async init() {
     this.logger = MainConfig.logger();
     this.siteConfigs = _.keyBy(getSiteConfigs(), (v) => v.key);
+    let ps = [];
     for (let scnf of getSiteConfigs()) {
       this.siteConfigs[scnf.key] = scnf;
       let site = new BtCrawler(scnf);
       this.sites[scnf.key] = site;
-      await site.init();
+      ps.push(site.init());
     }
+    await Promise.all(ps);
   }
 
   /**
    * 找相同文件的种子
    * @param q
    */
-  async findSimilarTorrent(q: { btPath?: string }) {
+  async findSimilarTorrent(q: { btPath?: string; sites?: string[] }) {
     let subMod = new BtSubItem();
     let tInfo;
     if (q.btPath) {
@@ -55,16 +57,30 @@ export class BtMain {
       let reDo = false;
       do {
         reDo = false;
+        let ebody: any = {
+          query: {
+            bool: {
+              must: [
+                {
+                  term: {
+                    fsize: fSize,
+                  },
+                },
+              ],
+            },
+          },
+        };
+        if (_.size(q.sites) > 0) {
+          ebody.query.bool.must.push({
+            terms: {
+              site: q.sites,
+            },
+          });
+        }
         let res = await ESClient.inst().search({
           index: subMod.indexName(),
           size: 10000,
-          body: {
-            query: {
-              term: {
-                fsize: fSize,
-              },
-            },
-          },
+          body: ebody,
         });
         let subList = _.map(res.body.hits.hits, (v) => {
           let s = new BtSubItem(v._source);

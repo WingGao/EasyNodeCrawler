@@ -16,12 +16,14 @@ import * as moment from 'moment';
 import * as fs from 'fs';
 import cookies from '../../sites/cookie';
 import path = require('path');
+import ResourceTask from '../utils/resourceTask';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
   pageUrlExt?: string;
   axConfig?: any;
-  cachePrefix?: any; //1小时内判断是否遍历过
+  cachePrefix?: any; //判断是否遍历过
+  cacheSecond?: number; //缓存多久，默认1小时
   poolSize?: number;
 }
 export abstract class SiteCrawler {
@@ -361,7 +363,9 @@ export abstract class SiteCrawler {
     cnf: IPostParseConfig = {},
   ) {
     let pageG = 1;
-    for (let page = 1; page <= pageG; page++) {
+    let poolSize = _.defaultTo(cnf.poolSize, 1);
+    let pageRes = [];
+    let fetchAct = async (page: number) => {
       let ok = true;
       let visitKey;
       await runSafe(
@@ -386,16 +390,35 @@ export abstract class SiteCrawler {
           }
           pageG = pageMax;
           ok = await cb(posts);
-          if (visitKey) await Redis.inst().setex(visitKey, 3600, 1);
+          if (visitKey) await Redis.inst().setex(visitKey, _.defaultTo(cnf.cacheSecond, 3600), 1);
         },
         async (e) => {
           this.logger.error(e);
           return false;
         },
       );
+      return ok;
+    };
+    for (let page = 1; page <= pageG; page++) {
+      let ok; //只对 poolSize==1的才生效
+      if (page == 1 || poolSize <= 1) {
+        ok = await fetchAct(page);
+      } else {
+        pageRes.push(page);
+        ok = true;
+      }
       if (!ok) {
         break;
       }
+    }
+    if (pageRes.length > 0) {
+      let task = new ResourceTask({
+        resourceArr: pageRes,
+        onDo: fetchAct,
+        max: poolSize,
+      });
+      task.start();
+      await task.wait();
     }
   }
 

@@ -10,7 +10,8 @@ export async function registerBt(router: Router, prefix = '/api/bt') {
   //查找相似
   router.post(`${prefix}/findSimilarTorrent`, async (ctx, next) => {
     const file = ctx.request.files.file;
-    let r = await BtMainInst.findSimilarTorrent({ btPath: file.path });
+    const q = JSON.parse(ctx.request.body.q);
+    let r = await BtMainInst.findSimilarTorrent({ btPath: file.path, ...q });
     ctx.body = r;
     return next();
   });

@@ -10,7 +10,7 @@ import getSiteConfigs from './sitecnf';
 import { BtSiteBaseConfig } from './sitecnf/base';
 import cheerio = require('cheerio');
 import ESClient from '../../es';
-import { Progress, runSafe } from '../../utils';
+import { Progress, runSafe, sleep } from '../../utils';
 import ResourceTask from '../../utils/resourceTask';
 import WgwClient from '../../utils/wgw';
 import parseTorrent = require('parse-torrent');
@@ -20,6 +20,7 @@ import cookies from '../../../sites/cookie';
 import * as path from 'path';
 import * as yargs from 'yargs';
 
+//NexusPhp
 export class BtCrawler extends SiteCrawler {
   btCnf: BtSiteBaseConfig;
   static minFileSize = 100 * 1024 * 1024;
@@ -35,7 +36,7 @@ export class BtCrawler extends SiteCrawler {
     super(scnf);
     this.btCnf = cnf;
     this.passkey = _.get(cookies[cnf.host], 'passkey');
-    this.downloadThread = 3;
+    this.downloadThread = this.btCnf.downloadThread;
   }
 
   async init(): Promise<void> {
@@ -53,7 +54,9 @@ export class BtCrawler extends SiteCrawler {
   }
 
   getPostListUrl(cateId, page: number = 1, ext?: string): string {
-    return this.config.fullUrl(`${cateId}?&page=${page - 1}${_.defaultTo(ext, '')}`);
+    return this.config.fullUrl(
+      `${cateId}${cateId.indexOf('?') >= 0 ? '' : '?'}&page=${page - 1}${_.defaultTo(ext, '')}`,
+    );
   }
 
   getPostUrl(pid, page?: number): string {
@@ -71,7 +74,9 @@ export class BtCrawler extends SiteCrawler {
     let $pages = $('.torrents').siblings('p').find('a');
     let pageMax = 0;
     $pages.each((i, v) => {
-      let page = parseInt(/page=(\d+)/.exec(v.attribs.href)[1]);
+      let g = /page=(\d+)/.exec(v.attribs.href);
+      if (g == null) return;
+      let page = parseInt(g[1]);
       if (!isNaN(page)) {
         pageMax = Math.max(pageMax, page);
       }
@@ -85,15 +90,26 @@ export class BtCrawler extends SiteCrawler {
       torrent.site = this.btCnf.key;
       let $tds = $tr.find('>td');
       let $tname = $tr.find('.torrentname');
-      let $tdName = $tname.find('td.embedded').eq(0);
-      let $a = $tname.find('a').filter((j, x) => _.get(x.attribs, 'href').indexOf('details.php') >= 0);
+      let $a = $tname.find('a').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('details') >= 0);
       torrent.tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
-      torrent.title = $a.text().trim();
-      $a.remove();
-      let br = $tdName.find('br').get(0);
-      if (br != null) {
-        torrent.title2 = $(br.nextSibling).text().trim();
+      torrent.title = $a.attr('title').trim();
+      if (torrent.title.length == 0) {
+        debugger;
       }
+      let $tdName = $a.closest('td');
+      $a.remove();
+      let textList = $tdName.contents().filter((j, x) => x.type == 'text');
+      let tit2Node = _.last(textList);
+      if (tit2Node != null) {
+        let tit2 = tit2Node.data.trim();
+        if (tit2.length > 0) {
+          torrent.title2 = tit2;
+        }
+      }
+      // if (torrent.title.indexOf('7 Minutes') >= 0) {
+      //   debugger;
+      // }
+
       let ctimeT = $tds.eq(3).find('span').attr('title');
       torrent.createTime = new Date(ctimeT);
       let sizeT = $tds.eq(4).text().trim();
@@ -255,6 +271,7 @@ export class BtCrawler extends SiteCrawler {
         await runSafe(
           async () => {
             await this.downloadBtFile(bt.tid);
+            if (this.btCnf.downloadDelay > 0) await sleep(this.btCnf.downloadDelay);
             // let flist = await this.fetchSubItems(bt);
             // if (flist.length > 0) {
             //   let bodys = flist.flatMap((x) => [
@@ -459,6 +476,12 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
       }
     }
   }
+
+  //签到
+  async checkin(): Promise<boolean> {
+    let rep = await this.axiosInst.get('/attendance.php');
+    return rep.data;
+  }
 }
 
 // export function mksize(bytes)
@@ -522,6 +545,7 @@ async function main() {
   if (argv.site) {
     /**
      * --site=nicept --act=list
+     * --site=pthome --act=file --doCates=all
      */
     ua = {
       site: _.find(siteChoices, (v) => v.name == argv.site).value,
@@ -552,7 +576,7 @@ async function main() {
   let cates = sc.torrentPages.map((v) => ({ id: v, name: v }));
   switch (ua.act) {
     case 'list':
-      await site.startFindLinks(cates);
+      await site.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
       break;
     case 'file':
       let { doCates } = argv;
