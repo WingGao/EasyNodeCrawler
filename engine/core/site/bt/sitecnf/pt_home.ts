@@ -7,6 +7,6 @@ const PTHome = _.merge(new BtSiteBaseConfig(), {
   torrentPages: ['/torrents.php'],
   myUserId: '122385', //shaziniu
   downloadThread: 1, //站点有限制
-  downloadDelay: (30 / 3600) * 1000, //1小时30个
+  downloadDelay: (3600 / 30) * 1000, //1小时30个
 });
 export default PTHome;

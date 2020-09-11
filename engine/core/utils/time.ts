@@ -2,6 +2,7 @@ import * as moment from 'moment';
 import { Moment } from 'moment';
 
 export function sleep(ms, logg?) {
+  if (ms <= 0) return Promise.resolve();
   if (logg != null) {
     logg(['sleep', moment.duration(ms).toISOString()]);
   }

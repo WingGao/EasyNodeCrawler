@@ -154,6 +154,23 @@ export class BtMain {
       items,
     };
   }
+
+  async updateSiteAll() {
+    // 已经全量更新完的站点
+    let updateSites = ['nicept', 'soulvoice'];
+    let ps = [];
+    for (let key of updateSites) {
+      let sc = this.sites[key];
+      let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));
+      ps.push(
+        (async () => {
+          await sc.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
+          await sc.startFetchFileInfos2(cates, true);
+        })(),
+      );
+    }
+    await Promise.all(ps);
+  }
 }
 
 let BtMainInst = new BtMain();
@@ -163,7 +180,8 @@ if (require.main === module) {
   (async () => {
     await initConfig();
     await BtMainInst.init();
-    let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
+    // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
+    await BtMainInst.updateSiteAll();
     return;
   })();
 }

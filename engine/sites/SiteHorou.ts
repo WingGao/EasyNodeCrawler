@@ -58,7 +58,10 @@ if (require.main === module) {
       cnf.replyTimeSecond = (60 * 60) / 20; //1小时15帖
       await this.site.checkin();
       await this.task(27); //潜水
+      await this.task(26); //回20贴
       await this.spam.shuiTask([
+        //检查任务
+        () => this.task(26, false),
         //河洛茶馆
         () =>
           this.spam.doWithLimit('reply', () =>
@@ -73,11 +76,12 @@ if (require.main === module) {
       ]);
     }
     // 接任务
-    async task(tid) {
-      let rep = await this.site.axiosInst.get(`/home.php?mod=task&do=apply&id=${tid}`);
+    async task(tid, start = true) {
+      let rep = await this.site.axiosInst.get(`/home.php?mod=task&do=${start ? 'apply' : 'draw'}&id=${tid}`);
       let $ = cheerio.load(rep.data);
       this.site.logger.info('任务', tid, $('#messagetext').text().trim());
       // return rep.data;
+      return false;
     }
   }
 

@@ -206,15 +206,47 @@ export class BtCrawler extends SiteCrawler {
   //   }
   // }
   // 获取种子文件列表，目前只收集>100M的文件
-  async startFetchFileInfos2(cates) {
+  async startFetchFileInfos2(cates, downloadFile: boolean) {
     let b = new BtTorrent({ site: this.btCnf.key });
     let pg = new Progress();
 
     async function* resIter() {
       for (let cate of cates) {
+        let query = {
+          bool: {
+            must: [
+              { term: { site: b.site } },
+              {
+                term: {
+                  categoryId: cate.id,
+                },
+              },
+            ],
+            must_not: [
+              {
+                exists: {
+                  field: 'hasBt',
+                },
+              },
+              {
+                exists: {
+                  field: 'deleteAt',
+                },
+              },
+            ],
+          },
+        };
+        if (!downloadFile) {
+          //获取列表的方式查询
+          query.bool.must_not.push({
+            exists: {
+              field: 'hasFiles',
+            },
+          });
+        }
         let scrollSearch = ESClient.inst().helpers.scrollSearch({
           index: b.indexName(),
-          scroll: '10m',
+          scroll: '1h',
           body: {
             size: 20,
             sort: [
@@ -224,30 +256,7 @@ export class BtCrawler extends SiteCrawler {
                 },
               },
             ],
-            query: {
-              bool: {
-                must: [
-                  { term: { site: b.site } },
-                  {
-                    term: {
-                      categoryId: cate.id,
-                    },
-                  },
-                ],
-                must_not: [
-                  {
-                    exists: {
-                      field: 'hasBt',
-                    },
-                  },
-                  {
-                    exists: {
-                      field: 'deleteAt',
-                    },
-                  },
-                ],
-              },
-            },
+            query,
           },
         });
         for await (const result of scrollSearch) {
@@ -266,30 +275,42 @@ export class BtCrawler extends SiteCrawler {
     let task = new ResourceTask({
       // create: () => ito.next() as any,
       createIter: resIter(),
-      max: this.downloadThread,
+      max: downloadFile ? this.downloadThread : 3,
       onDo: async (bt: BtTorrent) => {
+        if (bt.hasBt) return;
         await runSafe(
           async () => {
-            await this.downloadBtFile(bt.tid);
-            if (this.btCnf.downloadDelay > 0) await sleep(this.btCnf.downloadDelay);
-            // let flist = await this.fetchSubItems(bt);
-            // if (flist.length > 0) {
-            //   let bodys = flist.flatMap((x) => [
-            //     {
-            //       index: {
-            //         _index: x.indexName(),
-            //         _id: x.uniqId(),
-            //       },
-            //     },
-            //     x.getBody(),
-            //   ]);
-            //   let createRep = await ESClient.inst().bulk({ body: bodys });
-            //   ESClient.checkRep(createRep);
-            // }
-            // bt.hasFiles = true;
-            // await bt.save();
-            // this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
-            this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
+            if (downloadFile) {
+              //下载文件
+              await this.downloadBtFile(bt.tid);
+              if (this.btCnf.downloadDelay > 0) {
+                await sleep(this.btCnf.downloadDelay, (v) => {
+                  if (this.btCnf.downloadDelay > 30000) {
+                    this.logger.debug('startFetchFileInfos2', v);
+                  }
+                });
+              }
+              this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
+            } else if (!bt.hasFiles) {
+              //读取详情
+              let flist = await this.fetchSubItems(bt);
+              if (flist.length > 0) {
+                let bodys = flist.flatMap((x) => [
+                  {
+                    index: {
+                      _index: x.indexName(),
+                      _id: x.uniqId(),
+                    },
+                  },
+                  x.getBody(),
+                ]);
+                let createRep = await ESClient.inst().bulk({ body: bodys });
+                ESClient.checkRep(createRep);
+              }
+              bt.hasFiles = true;
+              await bt.save();
+              this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+            }
             pg.incr();
           },
           async (e) => {
@@ -566,6 +587,7 @@ async function main() {
         choices: [
           { name: '爬取列表', value: 'list' },
           { name: '爬取种子', value: 'file' },
+          { name: '爬取种子文件信息', value: 'file2' },
         ],
       },
     ]);
@@ -579,6 +601,7 @@ async function main() {
       await site.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
       break;
     case 'file':
+    case 'file2':
       let { doCates } = argv;
       let doChoices = [{ name: 'all', value: cates }, ...cates.map((v) => ({ name: v.id, value: [v] }))];
       if (doCates) {
@@ -592,7 +615,7 @@ async function main() {
         });
         doCates = r.doCates;
       }
-      await site.startFetchFileInfos2(doCates);
+      await site.startFetchFileInfos2(doCates, ua.act == 'file');
       break;
     default:
       MainConfig.logger().error('不支持的act');
