@@ -50,7 +50,7 @@ export class SiteConfig {
   constructor(key: string, props?: Partial<SiteConfig>) {
     this.key = key;
     _.merge(this, props);
-    this.tempPath = path.resolve(__dirname, '../../../temp/' + key);
+    this.tempPath = path.resolve(MainConfig.default().tempDir, key);
   }
 
   fullUrl(p) {
@@ -61,6 +61,7 @@ export class SiteConfig {
     return `http${this.https ? 's' : ''}://${this.host}${p}`;
   }
 }
+
 interface IProxy {
   type: 'http' | 'sock5';
   host: string;
@@ -93,6 +94,8 @@ export class MainConfig {
     port: number;
   };
 
+  tempDir: string = path.resolve(__dirname, '../../../temp');
+
   static default(c?: MainConfig) {
     if (c != null) {
       defaultConfig = c;
@@ -110,6 +113,7 @@ export class MainConfig {
     return defaultLogger;
   }
 }
+
 let defaultLogger = getLogger('main');
 defaultLogger.level = 'debug';
 let defaultConfig: MainConfig = null;
@@ -126,6 +130,7 @@ export class SiteCacheInfo {
   site: string;
   cateLastMap: { [key: string]: any } = {}; //对应增量标记
   other: { [key: string]: any } = {};
+
   async load(siteKey?: string) {
     if (siteKey == null) siteKey = this.site;
     let kv = new KVItem(siteKey + '-cache');
@@ -137,6 +142,7 @@ export class SiteCacheInfo {
     this.site = siteKey;
     return true;
   }
+
   save() {
     let kv = new KVItem(this.site + '-cache', JSON.stringify(this));
     return kv.save();

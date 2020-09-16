@@ -15,3 +15,5 @@ proxy:
 
 http:
   port: 20010
+
+tempDir: "D:\\Bt\\CrawlerTorrents"
