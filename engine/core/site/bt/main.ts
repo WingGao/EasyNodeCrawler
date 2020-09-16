@@ -157,14 +157,15 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['nicept', 'soulvoice'];
+    let updateSites = ['leaguehd', 'nicept', 'pterclub', 'soulvoice'];
     let ps = [];
     for (let key of updateSites) {
       let sc = this.sites[key];
       let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));
+      if (!sc.isCheckIn) ps.push(sc.checkin());
       ps.push(
         (async () => {
-          await sc.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
+          await sc.startFindLinks(cates, { cacheSecond: 0, poolSize: 1 });
           await sc.startFetchFileInfos2(cates, true);
         })(),
       );

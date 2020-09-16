@@ -51,4 +51,10 @@ export class Progress {
     let remain = moment.duration(r.remainSecond, 'second');
     return `进度：${r.count}/${r.total}(${((r.count * 100) / r.total).toFixed(2)}%) 剩余时间：${remain.toISOString()}`;
   }
+  reset() {
+    this.total = 0;
+    this.records = [];
+    this.recTotalTimeSec = 0;
+    this.lastTime = null;
+  }
 }

@@ -6,11 +6,12 @@ let ignoreErrors = [
   'Client network socket disconnected before secure TLS connection was established',
 ];
 // onError: false继续，true退出
-export async function runSafe(act: () => Promise<any>, onError: (Error) => Promise<boolean>) {
+export async function runSafe(act: (retry: number) => Promise<any>, onError: (Error) => Promise<boolean>) {
+  let retry = 0;
   while (true) {
     let ok = true;
     try {
-      await act();
+      await act(retry);
     } catch (e) {
       if (ignoreErrors.find((v) => e.message.indexOf(v) >= 0) != null) {
         ok = false;
@@ -20,6 +21,7 @@ export async function runSafe(act: () => Promise<any>, onError: (Error) => Promi
     }
     if (ok) break;
     else await sleep(10 * 1000);
+    retry++;
   }
 }
 

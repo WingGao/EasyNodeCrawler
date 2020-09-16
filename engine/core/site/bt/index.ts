@@ -46,7 +46,13 @@ export class BtCrawler extends SiteCrawler {
 
   async checkCookie(): Promise<any> {
     let rep = await this.axiosInst.get('/usercp.php');
-    return rep.data.indexOf(this.btCnf.myUserId) > 0;
+    let ok = rep.data.indexOf(this.btCnf.myUserId) > 0;
+    if (ok) {
+      let $ = cheerio.load(rep.data);
+      let infoTxt = $('#info_block').text();
+      this.isCheckIn = /簽到已得|签到已得/.test(infoTxt);
+    }
+    return ok;
   }
 
   checkPermission($): boolean {
@@ -212,6 +218,7 @@ export class BtCrawler extends SiteCrawler {
 
     async function* resIter() {
       for (let cate of cates) {
+        pg.reset();
         let query = {
           bool: {
             must: [
@@ -244,6 +251,7 @@ export class BtCrawler extends SiteCrawler {
             },
           });
         }
+        //TODO 超时处理
         let scrollSearch = ESClient.inst().helpers.scrollSearch({
           index: b.indexName(),
           scroll: '1h',
@@ -259,6 +267,7 @@ export class BtCrawler extends SiteCrawler {
             query,
           },
         });
+
         for await (const result of scrollSearch) {
           if (pg.total == 0) pg.total = result.body.hits.total.value;
           let bts = [];
@@ -279,17 +288,18 @@ export class BtCrawler extends SiteCrawler {
       onDo: async (bt: BtTorrent) => {
         if (bt.hasBt) return;
         await runSafe(
-          async () => {
+          async (retry) => {
             if (downloadFile) {
-              //下载文件
-              await this.downloadBtFile(bt.tid);
-              if (this.btCnf.downloadDelay > 0) {
-                await sleep(this.btCnf.downloadDelay, (v) => {
-                  if (this.btCnf.downloadDelay > 30000) {
-                    this.logger.debug('startFetchFileInfos2', v);
-                  }
-                });
+              if (retry >= 10) {
+                //种子文件有问题
+                bt.deleteAt = new Date();
+                await bt.save();
+                this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 错误过多 删除`);
+                return;
               }
+              //下载文件
+              await this.downloadBtFile(bt.tid, this.btCnf.downloadDelay);
+
               this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
             } else if (!bt.hasFiles) {
               //读取详情
@@ -383,7 +393,7 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     }
   }
 
-  async downloadBtFile(tid: number) {
+  async downloadBtFile(tid: number, delay = 0) {
     let furl = this.config.fullUrl(`/download.php?id=${tid}&passkey=${this.passkey}&https=1`);
     let dFile = await this.download(furl, { desFile: `${this.btCnf.key}-${tid}.torrent` }).catch(async (e) => {
       if (e.response && e.response.status == 404) {
@@ -413,8 +423,16 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     if (dFile == null) {
       return;
     }
+    if (delay > 0) {
+      await sleep(delay, (v) => {
+        if (delay > 30000) {
+          this.logger.debug('downloadBtFile', v);
+        }
+      });
+    }
     await this.fixBtData(tid, dFile as string).catch((e) => {
-      if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
+      // if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
+      if (e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0) {
         //种子文件有问题重新下载
         this.logger.error('种子文件错误', dFile);
         fs.unlinkSync(dFile as string);
@@ -501,7 +519,11 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
   //签到
   async checkin(): Promise<boolean> {
     let rep = await this.axiosInst.get('/attendance.php');
-    return rep.data;
+    // return rep.data;
+    let $ = cheerio.load(rep.data);
+    let txt = $('#outer').text();
+    this.logger.info('签到', txt);
+    return true;
   }
 }
 

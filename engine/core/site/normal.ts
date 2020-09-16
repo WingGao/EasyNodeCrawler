@@ -34,6 +34,7 @@ export abstract class SiteCrawler {
   cache: SiteCacheInfo;
   private driver: WebDriver;
   lastReplyTime: number = 0; //最后回复时间
+  isCheckIn = false; //是否签到
 
   constructor(config: SiteConfig) {
     // 获取默认cookie
@@ -372,7 +373,7 @@ export abstract class SiteCrawler {
         async () => {
           let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
           if (page > 1) {
-            if (cnf.cachePrefix != null) {
+            if (cnf.cachePrefix != null && cnf.cacheSecond != 0) {
               visitKey =
                 `${MainConfig.default().dataPrefix}:${this.config.key}:visited:${cnf.cachePrefix}:` +
                 `${cateId}:page-${page}`;
