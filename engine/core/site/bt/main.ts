@@ -13,6 +13,7 @@ import { Logger } from 'log4js';
 import { MainConfig } from '../../config';
 import stringSimilarity = require('string-similarity');
 import { initConfig } from '../../index';
+
 /**
  * 将所有BT站点聚合
  */
@@ -21,16 +22,24 @@ export class BtMain {
   sites: { [key: string]: BtCrawler } = {};
   logger: Logger;
   downloadThread = 3;
+
   constructor() {}
+
   async init() {
     this.logger = MainConfig.logger();
     this.siteConfigs = _.keyBy(getSiteConfigs(), (v) => v.key);
     let ps = [];
     for (let scnf of getSiteConfigs()) {
+      // if (scnf.key == 'btschool') continue;
       this.siteConfigs[scnf.key] = scnf;
       let site = new BtCrawler(scnf);
       this.sites[scnf.key] = site;
-      ps.push(site.init());
+      ps.push(
+        site.init().catch((e) => {
+          site.logger.warn('init失败');
+          throw e;
+        }),
+      );
     }
     await Promise.all(ps);
   }
@@ -111,7 +120,7 @@ export class BtMain {
             }
           }
         }
-        if (_.size(toFixTids) > 0) {
+        if (_.size(toFixTids) > 0 && false) {
           reDo = true;
           let bts = _.values(toFixTids);
           let pg = new Progress(bts.length);
@@ -157,20 +166,24 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['leaguehd', 'nicept', 'pterclub', 'soulvoice'];
-    let ps = [];
-    for (let key of updateSites) {
-      let sc = this.sites[key];
+    let updateSites = ['btschool', 'leaguehd', 'mteam', 'nicept', 'pterclub', 'soulvoice'];
+    await this.loopSites(updateSites, async (sc) => {
+      await sc.checkin();
       let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));
-      if (!sc.isCheckIn) ps.push(sc.checkin());
-      ps.push(
-        (async () => {
-          await sc.startFindLinks(cates, { cacheSecond: 0, poolSize: 1 });
-          await sc.startFetchFileInfos2(cates, true);
-        })(),
-      );
+      await sc.startFindLinks(cates, { cacheSecond: 0, poolSize: 1 });
+      await sc.startFetchFileInfos2(cates, true);
+    });
+  }
+
+  async loopSites(siteKeys: string[], onAct: (sc: BtCrawler) => Promise<void>) {
+    let ps = [];
+    for (let key of siteKeys) {
+      let sc = this.sites[key];
+      ps.push(onAct(sc));
     }
-    await Promise.all(ps);
+    await Promise.all(ps).catch((e) => {
+      this.logger.error(e);
+    });
   }
 }
 

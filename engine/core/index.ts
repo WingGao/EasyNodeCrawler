@@ -51,6 +51,8 @@ export async function initConfig(configPath?) {
     (await esClient.indices.get({ index: post.indexName() }).catch((e) => {
       if (e.message == 'index_not_found_exception') {
         return false;
+      } else {
+        throw e;
       }
     })) === false
   ) {

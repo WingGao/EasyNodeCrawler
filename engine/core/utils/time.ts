@@ -53,6 +53,7 @@ export class Progress {
   }
   reset() {
     this.total = 0;
+    this.count = 0;
     this.records = [];
     this.recTotalTimeSec = 0;
     this.lastTime = null;

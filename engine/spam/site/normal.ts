@@ -232,9 +232,7 @@ export default class SpamNormal {
       return false;
     }
   }
-
-  async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
-    let maxVal = this.config.limit[limitKey];
+  async doWithLimit2(limitKey: string, maxVal: number, action: () => Promise<boolean>) {
     let currentVal = 0;
     let redisKey = `${MainConfig.default().dataPrefix}:${this.config.key}:todayLimit:${limitKey}`;
     let dec = async () => {
@@ -274,6 +272,10 @@ export default class SpamNormal {
       await dec();
       throw e;
     }
+  }
+  async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
+    let maxVal = this.config.limit[limitKey];
+    return this.doWithLimit2(limitKey, maxVal, action);
   }
 
   async tt() {

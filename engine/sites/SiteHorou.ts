@@ -46,9 +46,10 @@ export default function getConfig() {
 }
 
 if (require.main === module) {
-  let cnf = getConfig();
+  let cnf;
   class A extends BaseAction {
     async init(): Promise<any> {
+      cnf = getConfig();
       this.cnf = cnf;
       this.site = new SiteCrawlerDiscuz(cnf);
       this.spam = new SpamNormal(cnf, this.site);
@@ -56,10 +57,14 @@ if (require.main === module) {
     async shui() {
       cnf.saveBody = 0;
       cnf.replyTimeSecond = (60 * 60) / 20; //1小时15帖
-      await this.site.checkin();
-      await this.task(27); //潜水
-      await this.task(26); //回20贴
       await this.spam.shuiTask([
+        () =>
+          this.spam.doWithLimit2('checkin', 1, async () => {
+            await this.site.checkin();
+            await this.task(27); //潜水
+            await this.task(26); //回20贴
+            return true;
+          }),
         //检查任务
         () => this.task(26, false),
         //河洛茶馆

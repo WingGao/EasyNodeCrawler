@@ -13,6 +13,7 @@ import SpamNormal from '../spam/site/normal';
 import { SpamRecord } from '../spam/model';
 import inquirer = require('inquirer');
 import BaseAction from './base';
+import moment = require('moment');
 
 export default function getConfig() {
   let sc = new SiteConfig('www.abooky.com');
@@ -56,26 +57,42 @@ export default function getConfig() {
 }
 
 if (require.main === module) {
-  let cnf = getConfig();
+  let cnf;
+
   class A extends BaseAction {
     async init(): Promise<any> {
+      cnf = getConfig();
       this.cnf = cnf;
       this.site = new SiteCrawlerDiscuz(cnf);
       this.spam = new SpamNormal(cnf, this.site);
     }
+
     async shui() {
       let spam = this.spam;
       let site = this.site as SiteCrawlerDiscuz;
       cnf.saveBody = 0;
-      await this.site.checkin();
-      cnf.replyTimeSecond = 30;
+
       await spam.shuiTask([
+        () =>
+          spam.doWithLimit2('checkin', 1, async () => {
+            await site.checkin();
+            return true;
+          }),
+        async () => {
+          let now = moment();
+          if (now.hours() >= 8) {
+            //8点后运行
+            return false;
+          }
+          return true;
+        },
         //投票
         async () => {
           if (await spam.isLimited('vote')) {
             site.logger.info('vote上限');
             return false;
           }
+          cnf.replyTimeSecond = 30;
           return await spam.shuiCagegory('50', {
             pageUrlExt: '&filter=specialtype&orderby=dateline&specialtype=poll',
             onReply: async (p: Post) => {
@@ -117,5 +134,6 @@ if (require.main === module) {
       ]);
     }
   }
+
   new A().start();
 }

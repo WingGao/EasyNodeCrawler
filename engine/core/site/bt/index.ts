@@ -15,7 +15,7 @@ import ResourceTask from '../../utils/resourceTask';
 import WgwClient from '../../utils/wgw';
 import parseTorrent = require('parse-torrent');
 import fs = require('fs');
-
+import check = require('check-types');
 import cookies from '../../../sites/cookie';
 import * as path from 'path';
 import * as yargs from 'yargs';
@@ -51,6 +51,9 @@ export class BtCrawler extends SiteCrawler {
       let $ = cheerio.load(rep.data);
       let infoTxt = $('#info_block').text();
       this.isCheckIn = /簽到已得|签到已得/.test(infoTxt);
+    } else {
+      this.logger.error('未登录');
+      throw Error('未登录');
     }
     return ok;
   }
@@ -75,6 +78,9 @@ export class BtCrawler extends SiteCrawler {
     cateId?,
     html?: string,
   ): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
+    if (this.btCnf.parsePage != null) {
+      return this.btCnf.parsePage(this, $, cateId, html);
+    }
     let $form = $('#form_torrent');
     // 获取页数
     let $pages = $('.torrents').siblings('p').find('a');
@@ -363,6 +369,7 @@ export class BtCrawler extends SiteCrawler {
         // @ts-ignore
         let bts = posts as Array<BtTorrent>;
         let oldFreeList = _.defaultTo(oldCache[cate], []);
+        //TODO 短时间内高做种+下载数的热门
         let nextList = _.filter(bts, (b) => b._isFree || b._isTop);
         let newFreeList = _.filter(nextList, (b) => oldFreeList.indexOf(b.tid) < 0);
         this.logger.info('找到新的', newFreeList.length);
@@ -432,7 +439,10 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     }
     await this.fixBtData(tid, dFile as string).catch((e) => {
       // if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
-      if (e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0) {
+      if (
+        e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0 ||
+        e.stack.indexOf(path.join('node_modules', 'bencode')) >= 0
+      ) {
         //种子文件有问题重新下载
         this.logger.error('种子文件错误', dFile);
         fs.unlinkSync(dFile as string);
@@ -518,12 +528,36 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
 
   //签到
   async checkin(): Promise<boolean> {
+    if (!this.btCnf.checkin) return true;
+    if (this.btCnf.doCheckin != null) {
+      return await this.btCnf.doCheckin(this);
+    }
     let rep = await this.axiosInst.get('/attendance.php');
     // return rep.data;
     let $ = cheerio.load(rep.data);
     let txt = $('#outer').text();
     this.logger.info('签到', txt);
     return true;
+  }
+
+  //检查配置是否准确
+  async checkConfig() {
+    this.logger.info('检查cookie');
+    await this.checkCookie();
+    // 检查页
+    this.logger.info('检查列表获取');
+    let purl = this.getPostListUrl(this.btCnf.torrentPages[0], 1);
+    let pageRes = await this.fetchPage(purl);
+    check.assert.greater(pageRes.pageMax, 10, '页码解析失败');
+    check.assert.greater(pageRes.posts.length, 10, '列表解析失败');
+    for (let post of (pageRes.posts as any) as Array<BtTorrent>) {
+      this.logger.info(JSON.stringify(post));
+      check.assert.greater(post.tid, 0, 'tid解析失败');
+      check.assert.nonEmptyString(post.title, '标题为空');
+      check.assert.nonEmptyString(post.site, 'site为空');
+      check.assert.greater(post.createTime.getFullYear(), 1999, 'createTime 失败');
+      check.assert.integer(post.upNum, 'upNum 失败');
+    }
   }
 }
 
@@ -587,6 +621,7 @@ async function main() {
   let argv = yargs.argv;
   if (argv.site) {
     /**
+     * --site=nicept --act=check
      * --site=nicept --act=list
      * --site=pthome --act=file --doCates=all
      */
@@ -610,6 +645,7 @@ async function main() {
           { name: '爬取列表', value: 'list' },
           { name: '爬取种子', value: 'file' },
           { name: '爬取种子文件信息', value: 'file2' },
+          { name: '检查配置', value: 'check' },
         ],
       },
     ]);
@@ -638,6 +674,23 @@ async function main() {
         doCates = r.doCates;
       }
       await site.startFetchFileInfos2(doCates, ua.act == 'file');
+      if (['pthome'].indexOf(site.btCnf.key) >= 0) {
+        //特殊处理
+        while (true) {
+          await site.startFetchFileInfos2(doCates, ua.act == 'file');
+          await sleep(5 * 60 * 1000);
+        }
+      }
+      break;
+    case 'check':
+      await site
+        .checkConfig()
+        .then(() => {
+          site.logger.info('检查通过');
+        })
+        .catch((e) => {
+          site.logger.error('检查不通过', e);
+        });
       break;
     default:
       MainConfig.logger().error('不支持的act');

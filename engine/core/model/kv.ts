@@ -4,6 +4,7 @@ import { MainConfig } from '../config';
 export default class KVItem extends EsModel<KVItem> {
   key: string;
   value: any;
+
   constructor(key?: string, val?: any) {
     super();
     this.key = key;

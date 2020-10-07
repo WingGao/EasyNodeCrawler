@@ -1,3 +1,5 @@
+import { BtCrawler } from '../index';
+
 export class BtSiteBaseConfig {
   key: string;
   host: string;
@@ -7,4 +9,13 @@ export class BtSiteBaseConfig {
   myUserId: string;
   downloadThread: number = 3;
   downloadDelay: number = 0;
+  checkin: boolean = true;
+  doCheckin?: (bt: BtCrawler) => Promise<boolean>;
+  parsePage?: (
+    bt: BtCrawler,
+    $: CheerioStatic,
+    cateId?,
+    html?: string,
+  ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }>;
+  pageStart0: boolean = false;
 }

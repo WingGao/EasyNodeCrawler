@@ -17,6 +17,7 @@ import * as fs from 'fs';
 import cookies from '../../sites/cookie';
 import path = require('path');
 import ResourceTask from '../utils/resourceTask';
+import has = Reflect.has;
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -143,6 +144,12 @@ export abstract class SiteCrawler {
     for (let cate of cates) {
       this.logger.info('获取链接', JSON.stringify(cate));
       let lastId = null;
+      let hasLastId = this.cache.cateLastMap[cate.id] != null;
+      let cateCnf = _.cloneDeep(cnf);
+      if (hasLastId) {
+        //如果有增量一定是顺序任务
+        cateCnf.poolSize = 1;
+      }
       await this.loopCategory(
         cate.id,
         async (posts) => {
@@ -166,7 +173,7 @@ export abstract class SiteCrawler {
           await Promise.all(ps);
           return ok;
         },
-        cnf,
+        cateCnf,
       );
       //只有完成才获取
       this.cache.cateLastMap[cate.id] = lastId;
@@ -398,6 +405,7 @@ export abstract class SiteCrawler {
           return false;
         },
       );
+      //TODO 多个pool的停止问题
       return ok;
     };
     for (let page = 1; page <= pageG; page++) {

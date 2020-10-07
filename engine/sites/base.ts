@@ -18,7 +18,7 @@ abstract class BaseAction {
   async shui() {}
   async onOtherAction(act: string) {}
   async start() {
-    await initConfig('config/dev.yaml');
+    await initConfig();
     await this.init();
     await this.site.init();
 
