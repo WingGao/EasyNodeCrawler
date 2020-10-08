@@ -30,6 +30,7 @@ export class Post extends EsModel<Post> {
   _imgs?: Array<string>;
   _ext?: any;
   _isTop?: boolean;
+  _ignoreOld?: boolean; //在检查增量时是否忽略
   uniqId() {
     return `${this.site}-${this.id}`;
   }

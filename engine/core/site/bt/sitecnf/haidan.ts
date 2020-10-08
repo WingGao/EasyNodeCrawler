@@ -4,6 +4,7 @@ import { BtSiteBaseConfig } from './base';
 import { BtCrawler } from '../index';
 import { BtTorrent } from '../model';
 import { getInt } from '../../../utils';
+import { Post } from '../../../post';
 
 const Haidan = _.merge(new BtSiteBaseConfig(), {
   key: 'haidan',
@@ -64,14 +65,23 @@ Haidan.parsePage = (site: BtCrawler, $: CheerioStatic, cateId?, html?: string) =
         torrent._isTop = isTop;
         torrent._isFree = $item.find('.pro_free').length > 0 || $item.find('.pro_free2up').length > 0;
         posts.push(torrent);
+        return torrent;
       };
       if ($detail.length == 0) {
         parseItem($tr);
       } else {
         //有group
+        let maxId = 0;
+        let group = [] as Array<BtTorrent>;
         $detail.find('.torrent_item').each((j, ti) => {
-          parseItem($(ti));
+          let torr = parseItem($(ti));
+          if (torr.tid > maxId) maxId = torr.tid;
+          group.push(torr);
         });
+        for (let torr of group) {
+          //标记group里的旧项
+          if (torr.tid < maxId) torr._ignoreOld = true;
+        }
       }
     });
     return { $: undefined, pageMax, posts };

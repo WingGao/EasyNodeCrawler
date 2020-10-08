@@ -2,6 +2,7 @@ import ESClient, { EsModel } from '../../es';
 import { MainConfig } from '../../config';
 import crypto = require('crypto');
 
+// 需要和Post保持一致
 export class BtTorrent extends EsModel<BtTorrent> {
   tid: number; //种子id
   site: string;
@@ -18,6 +19,7 @@ export class BtTorrent extends EsModel<BtTorrent> {
   hasFiles: boolean; //知否处理过文件
   hasBt: boolean; //是否处理过种子
   deleteAt?: Date;
+  _ignoreOld?: boolean; //在检查增量时是否忽略
 
   get id() {
     return this.tid;

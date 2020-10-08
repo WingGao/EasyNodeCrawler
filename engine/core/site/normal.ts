@@ -161,7 +161,7 @@ export abstract class SiteCrawler {
             if (!ok) break;
             if (this.config.pageResultCheck) {
               //检查是否存在,跳过置顶的检查
-              if (p._isTop != true && (await this.linkIsOld(p))) {
+              if (!p._ignoreOld && p._isTop != true && (await this.linkIsOld(p))) {
                 this.logger.info('增量检查到', p.id);
                 ok = false;
                 break;
