@@ -28,9 +28,12 @@ export class BtMain {
   async init() {
     this.logger = MainConfig.logger();
     this.siteConfigs = _.keyBy(getSiteConfigs(), (v) => v.key);
+  }
+
+  async initSites(siteKeys: string[]) {
     let ps = [];
     for (let scnf of getSiteConfigs()) {
-      // if (scnf.key == 'btschool') continue;
+      if (siteKeys.indexOf(scnf.key) < 0 || this.sites[scnf.key] != null) continue;
       this.siteConfigs[scnf.key] = scnf;
       let site = new BtCrawler(scnf);
       this.sites[scnf.key] = site;
@@ -166,7 +169,8 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['btschool', 'leaguehd', 'mteam', 'nicept', 'pterclub', 'soulvoice'];
+    let updateSites = ['btschool', 'haidan', 'leaguehd', 'mteam', 'nicept', 'pterclub', 'soulvoice'];
+    await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();
       let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));

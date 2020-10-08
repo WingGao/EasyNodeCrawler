@@ -10,12 +10,12 @@ export class BtSiteBaseConfig {
   downloadThread: number = 3;
   downloadDelay: number = 0;
   checkin: boolean = true;
-  doCheckin?: (bt: BtCrawler) => Promise<boolean>;
+  doCheckin?: (bt: BtCrawler) => Promise<boolean> = null;
   parsePage?: (
     bt: BtCrawler,
     $: CheerioStatic,
     cateId?,
     html?: string,
-  ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }>;
+  ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> = null;
   pageStart0: boolean = false;
 }

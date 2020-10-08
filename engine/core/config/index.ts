@@ -8,8 +8,6 @@ import _ = require('lodash');
 import { Post } from '../post';
 import { getLogger } from 'log4js';
 import * as path from 'path';
-import ESClient, { EsModel } from '../es';
-import KVItem from '../model/kv';
 
 /**
  * 爬取站点的配置
@@ -124,27 +122,4 @@ export class LimitConfig {
   reply: number = -1; //回复次数
   thread: number = -1; //主题次数
   promotionVisit: number = -1; //访问推广
-}
-
-export class SiteCacheInfo {
-  site: string;
-  cateLastMap: { [key: string]: any } = {}; //对应增量标记
-  other: { [key: string]: any } = {};
-
-  async load(siteKey?: string) {
-    if (siteKey == null) siteKey = this.site;
-    let kv = new KVItem(siteKey + '-cache');
-    kv = await kv.getById(kv.key);
-    if (kv != null) {
-      let ob = JSON.parse(kv.value);
-      _.merge(this, ob);
-    }
-    this.site = siteKey;
-    return true;
-  }
-
-  save() {
-    let kv = new KVItem(this.site + '-cache', JSON.stringify(this));
-    return kv.save();
-  }
 }

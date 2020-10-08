@@ -1,5 +1,5 @@
 import * as yargs from 'yargs';
-import { MainConfig, SiteCacheInfo, SiteConfig, SiteType } from './config';
+import { MainConfig, SiteConfig, SiteType } from './config';
 import path = require('path');
 import fs = require('fs');
 import ESClient from './es';

@@ -1,5 +1,5 @@
-import ESClient, { EsModel } from '../es';
 import { MainConfig } from '../config';
+import ESClient, { EsModel } from '../es';
 
 export default class KVItem extends EsModel<KVItem> {
   key: string;

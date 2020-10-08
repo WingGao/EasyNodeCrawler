@@ -26,7 +26,7 @@ export default class ESClient {
 
 export abstract class EsModel<T> {
   constructor(props?: Partial<T>) {
-    _.merge(this, props);
+    if (props) _.merge(this, props);
   }
 
   abstract uniqId();

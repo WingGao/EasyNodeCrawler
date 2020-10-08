@@ -1,4 +1,4 @@
-import { MainConfig, SiteCacheInfo, SiteConfig, SiteType } from '../config';
+import { MainConfig, SiteConfig, SiteType } from '../config';
 import { getLogger, Logger } from 'log4js';
 import * as _ from 'lodash';
 import * as Crawler from 'crawler';
@@ -18,6 +18,7 @@ import cookies from '../../sites/cookie';
 import path = require('path');
 import ResourceTask from '../utils/resourceTask';
 import has = Reflect.has;
+import SiteCacheInfo from '../config/cache';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
