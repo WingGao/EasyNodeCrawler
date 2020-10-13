@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import { runSafe } from './task';
 import { sleep } from './time';
 import { MainConfig } from '../config';
-class IsNull {}
+export class IsNull {}
 class ResourceTask<T> {
   pool;
   onDo;

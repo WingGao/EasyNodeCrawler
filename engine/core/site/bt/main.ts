@@ -4,8 +4,8 @@ import { BtSiteBaseConfig } from './sitecnf/base';
 import { BtCrawler } from './index';
 import { BtSubItem, BtTorrent } from './model';
 import ESClient from '../../es';
-import { Progress } from '../../utils';
-import ResourceTask from '../../utils/resourceTask';
+import { Progress, sleep } from '../../utils';
+import ResourceTask, { IsNull } from '../../utils/resourceTask';
 import parseTorrent = require('parse-torrent');
 import fs = require('fs');
 import bytes = require('bytes');
@@ -13,6 +13,8 @@ import { Logger } from 'log4js';
 import { MainConfig } from '../../config';
 import stringSimilarity = require('string-similarity');
 import { initConfig } from '../../index';
+import redis, { getArtRedis } from '../../redis';
+import genericPool = require('generic-pool');
 
 /**
  * 将所有BT站点聚合
@@ -28,6 +30,7 @@ export class BtMain {
   async init() {
     this.logger = MainConfig.logger();
     this.siteConfigs = _.keyBy(getSiteConfigs(), (v) => v.key);
+    this.logger.debug('init');
   }
 
   async initSites(siteKeys: string[]) {
@@ -35,6 +38,7 @@ export class BtMain {
     for (let scnf of getSiteConfigs()) {
       if (siteKeys.indexOf(scnf.key) < 0 || this.sites[scnf.key] != null) continue;
       this.siteConfigs[scnf.key] = scnf;
+      if (this.sites[scnf.key] != null) continue; //已经初始化过
       let site = new BtCrawler(scnf);
       this.sites[scnf.key] = site;
       ps.push(
@@ -169,13 +173,21 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['btschool', 'haidan', 'leaguehd', 'mteam', 'nicept', 'pterclub', 'soulvoice'];
+    let updateSites = [
+      'btschool',
+      'haidan',
+      'leaguehd',
+      'nicept',
+      'pterclub',
+      'soulvoice',
+      // 'mteam',
+    ];
     await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();
       let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));
       await sc.startFindLinks(cates, { cacheSecond: 0, poolSize: 1 });
-      await sc.startFetchFileInfos2(cates, true);
+      await sc.startFetchFileInfos2(cates, BtCrawler.FETCH_MODE_DOWNLOAD);
     });
   }
 
@@ -189,6 +201,70 @@ export class BtMain {
       this.logger.error(e);
     });
   }
+
+  // 验证种子任务是否正确
+  async startVerifyTask() {
+    let queueKey = 'wgw:reseed:task:list';
+    let limitKeys = [];
+    _.filter(this.siteConfigs, (v, k) => {
+      if (v.downloadDelay > 0) {
+        limitKeys.push(k);
+      }
+      return false;
+    });
+    await this.initSites(limitKeys);
+    let pool = genericPool.createPool(
+      {
+        create: async () => {
+          let taskStr = await getArtRedis()
+            .lpop(queueKey)
+            .catch((e) => {});
+          if (taskStr == null) {
+            //没了
+            return new IsNull();
+          }
+          return taskStr;
+        },
+        destroy: async (r) => {},
+      },
+      {
+        max: 3,
+      },
+    );
+    while (true) {
+      let taskJson = await pool.acquire();
+      if (taskJson instanceof IsNull) {
+        await sleep(60000);
+        pool.destroy(taskJson);
+        continue;
+      }
+      //TODO catch
+      //验证
+      setTimeout(async () => {
+        let task = JSON.parse(taskJson);
+        let bt = new BtTorrent(task);
+        let site = this.sites[bt.site];
+        site.logger.info('验证', bt.uniqId());
+        try {
+          let res: BtTorrent = (await site.fetchPost(bt as any)) as any;
+          let btFile = Buffer.from(task.file64, 'base64');
+          let tInfo = parseTorrent(btFile);
+          if (res.hash == tInfo.infoHash) {
+            site.logger.info('验证正确', bt.uniqId());
+            //正确的种子文件
+            await site.fixBtData(bt.tid, btFile);
+          } else {
+            site.logger.info('验证错误', bt.uniqId());
+          }
+        } catch (e) {
+          site.logger.error(e);
+          //将任务添加到队列
+          await getArtRedis().rpush(queueKey, taskJson);
+        }
+        pool.destroy(taskJson);
+      }, 1);
+    }
+  }
 }
 
 let BtMainInst = new BtMain();
@@ -199,7 +275,8 @@ if (require.main === module) {
     await initConfig();
     await BtMainInst.init();
     // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-    await BtMainInst.updateSiteAll();
+    // await BtMainInst.updateSiteAll();
+    await BtMainInst.startVerifyTask();
     return;
   })();
 }

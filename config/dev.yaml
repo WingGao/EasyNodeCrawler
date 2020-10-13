@@ -2,7 +2,7 @@ es:
   node: 'http://localhost:9200'
 
 redis:
-  host: 172.19.219.213
+  host: wsl.local
   port: 6379
 
 wgwHost: 'http://127.0.0.1:9010'

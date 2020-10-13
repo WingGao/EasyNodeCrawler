@@ -19,6 +19,7 @@ import check = require('check-types');
 import cookies from '../../../sites/cookie';
 import * as path from 'path';
 import * as yargs from 'yargs';
+import moment = require('moment');
 
 //NexusPhp
 export class BtCrawler extends SiteCrawler {
@@ -128,6 +129,8 @@ export class BtCrawler extends SiteCrawler {
       torrent._fsizeH = sizeT;
       torrent.fsize = bytes(sizeT);
       torrent.upNum = parseInt($tds.eq(5).text().trim());
+      torrent._downloadNum = parseInt($tds.eq(6).text().trim());
+      torrent._completeNum = parseInt($tds.eq(7).text().trim());
       torrent._isTop = $tname.find('.sticky').length > 0;
       torrent._isFree = $tname.find('.pro_free').length > 0 || $tname.find('.pro_free2up').length > 0;
       posts.push(torrent);
@@ -218,7 +221,10 @@ export class BtCrawler extends SiteCrawler {
   //   }
   // }
   // 获取种子文件列表，目前只收集>100M的文件
-  async startFetchFileInfos2(cates, downloadFile: boolean) {
+  static FETCH_MODE_DOWNLOAD = 1; //下载种子
+  static FETCH_MODE_FETCH = 2; // 爬取文件列表
+  static FETCH_MODE_TASK = 3; // 提交到task
+  async startFetchFileInfos2(cates, mode: number) {
     let b = new BtTorrent({ site: this.btCnf.key });
     let pg = new Progress();
 
@@ -249,14 +255,11 @@ export class BtCrawler extends SiteCrawler {
             ],
           },
         };
-        if (!downloadFile) {
-          //获取列表的方式查询
-          query.bool.must_not.push({
-            exists: {
-              field: 'hasFiles',
-            },
-          });
-        }
+        // query.bool.must_not.push({
+        //     exists: {
+        //         field: 'hasFiles',
+        //     },
+        // });
         //TODO 超时处理
         let scrollSearch = ESClient.inst().helpers.scrollSearch({
           index: b.indexName(),
@@ -290,42 +293,49 @@ export class BtCrawler extends SiteCrawler {
     let task = new ResourceTask({
       // create: () => ito.next() as any,
       createIter: resIter(),
-      max: downloadFile ? this.downloadThread : 3,
+      max: mode == BtCrawler.FETCH_MODE_DOWNLOAD ? this.downloadThread : 3,
       onDo: async (bt: BtTorrent) => {
         if (bt.hasBt) return;
         await runSafe(
           async (retry) => {
-            if (downloadFile) {
-              if (retry >= 10) {
-                //种子文件有问题
-                bt.deleteAt = new Date();
-                await bt.save();
-                this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 错误过多 删除`);
-                return;
-              }
-              //下载文件
-              await this.downloadBtFile(bt.tid, this.btCnf.downloadDelay);
+            switch (mode) {
+              case BtCrawler.FETCH_MODE_DOWNLOAD:
+                if (retry >= 10) {
+                  //种子文件有问题
+                  bt.deleteAt = new Date();
+                  await bt.save();
+                  this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 错误过多 删除`);
+                  return;
+                }
+                //下载文件
+                await this.downloadBtFile(bt.tid, this.btCnf.downloadDelay);
 
-              this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
-            } else if (!bt.hasFiles) {
-              //读取详情
-              let flist = await this.fetchSubItems(bt);
-              if (flist.length > 0) {
-                let bodys = flist.flatMap((x) => [
-                  {
-                    index: {
-                      _index: x.indexName(),
-                      _id: x.uniqId(),
+                this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
+                break;
+              case BtCrawler.FETCH_MODE_FETCH:
+                //读取详情
+                let flist = await this.fetchSubItems(bt);
+                if (flist.length > 0) {
+                  let bodys = flist.flatMap((x) => [
+                    {
+                      index: {
+                        _index: x.indexName(),
+                        _id: x.uniqId(),
+                      },
                     },
-                  },
-                  x.getBody(),
-                ]);
-                let createRep = await ESClient.inst().bulk({ body: bodys });
-                ESClient.checkRep(createRep);
-              }
-              bt.hasFiles = true;
-              await bt.save();
-              this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+                    x.getBody(),
+                  ]);
+                  let createRep = await ESClient.inst().bulk({ body: bodys });
+                  ESClient.checkRep(createRep);
+                }
+                bt.hasFiles = true;
+                await bt.save();
+                this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+                break;
+              case BtCrawler.FETCH_MODE_TASK: //添加到task
+                await WgwClient.inst().reseedAddTask(bt.site, bt.tid);
+                this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} task ${pg.fmt()}`);
+                break;
             }
             pg.incr();
           },
@@ -343,9 +353,9 @@ export class BtCrawler extends SiteCrawler {
 
   async parsePost(post, $, pcf?: IPostParseConfig): Promise<Post> {
     let bt = post as BtTorrent;
-    let $hash = $('#showfl').closest('tr').find('td').eq(1);
-    let hash = $hash.text().split(':')[1].trim();
-    bt.hash = hash;
+    let $hash = $('#showfl').closest('tr');
+    let hash = /Hash[^\w]+([a-z0-9]{10,})[^\w]/i.exec($hash.text());
+    bt.hash = hash[1];
     return bt as any;
   }
 
@@ -357,29 +367,43 @@ export class BtCrawler extends SiteCrawler {
     return Promise.resolve(undefined);
   }
 
+  isHot(bt: BtTorrent): boolean {
+    if (bt._isHot == null) {
+      let durMinutes = moment().diff(bt.createTime, 'minutes');
+      if (durMinutes <= 40) {
+        bt._isHot = bt._downloadNum + bt._completeNum >= this.btCnf.hotRate[0];
+      } else if (durMinutes <= 70) {
+        bt._isHot = bt._downloadNum + bt._completeNum >= this.btCnf.hotRate[1];
+      } else {
+        bt._isHot = false;
+      }
+    }
+    return bt._isHot;
+  }
+
   // 新的free种子
-  async watchFree() {
+  async watchFree(checkHot: boolean, send = false): Promise<string> {
     await this.cache.load();
     let oldCache = _.defaultTo(this.cache.other.freeMap, {});
     let notifyHtml = ``;
-    let send = false;
+    let hasNew = false;
     for (let cate of this.btCnf.torrentPages) {
       //第一页
       await this.loopCategory(cate, async (posts) => {
         // @ts-ignore
         let bts = posts as Array<BtTorrent>;
         let oldFreeList = _.defaultTo(oldCache[cate], []);
-        //TODO 短时间内高做种+下载数的热门
-        let nextList = _.filter(bts, (b) => b._isFree || b._isTop);
+        let nextList = _.filter(bts, (b) => b._isFree || b._isTop || this.isHot(b));
         let newFreeList = _.filter(nextList, (b) => oldFreeList.indexOf(b.tid) < 0);
         this.logger.info('找到新的', newFreeList.length);
         notifyHtml += `<div><h3>${cate}</h3></div>`;
         newFreeList.forEach((v) => {
-          send = true;
+          hasNew = true;
           notifyHtml += `<div>
 <span>[${v.createTime.toLocaleString()}]</span>
 ${v._isTop ? `<span style="color: #7189d9">[Top]</span>` : ''}
 ${v._isFree ? `<span style="color: #0034ce">[Free]</span>` : ''}
+${v._isHot ? `<span style="color: #e78d0f">[Hot]</span>` : ''}
 ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target="_blank">[link]</a>
 </div>`;
         });
@@ -390,8 +414,8 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     }
     this.cache.other.freeMap = oldCache;
     await this.cache.save();
-    if (send) WgwClient.inst().sendMail(`[BT] ${this.btCnf.key} Free`, notifyHtml);
-    return notifyHtml;
+    if (send && hasNew) WgwClient.inst().sendMail(`[BT] ${this.btCnf.key} Free`, notifyHtml);
+    return hasNew ? notifyHtml : '';
   }
 
   async searchWeb(q: { hash?: string } = {}) {
@@ -437,7 +461,8 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
         }
       });
     }
-    await this.fixBtData(tid, dFile as string).catch((e) => {
+    let btFile = fs.readFileSync(dFile as string);
+    await this.fixBtData(tid, btFile).catch((e) => {
       // if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
       if (
         e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0 ||
@@ -454,13 +479,13 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
   }
 
   // 修复数据
-  async fixBtData(tid: number, btFile: string) {
+  async fixBtData(tid: number, btFile: Buffer) {
     let bt = new BtTorrent();
     bt.site = this.btCnf.key;
     bt.tid = tid;
     if (await bt.loadById()) {
       if (!bt.hasBt) {
-        let tInfo = parseTorrent(fs.readFileSync(btFile));
+        let tInfo = parseTorrent(btFile);
         bt.hash = tInfo.infoHash;
         //删除文件
         let delRep = await ESClient.inst().delete_by_query({
@@ -557,6 +582,9 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
       check.assert.nonEmptyString(post.site, 'site为空');
       check.assert.greater(post.createTime.getFullYear(), 1999, 'createTime 失败');
       check.assert.integer(post.upNum, 'upNum 失败');
+      check.assert.integer(post._downloadNum, '_downloadNum 失败');
+      check.assert.integer(post._completeNum, '_completeNum 失败');
+      check.assert.greater(post.upNum + post._downloadNum + post._completeNum, 10, 'num错误');
     }
   }
 }
@@ -644,7 +672,7 @@ async function main() {
         choices: [
           { name: '爬取列表', value: 'list' },
           { name: '爬取种子', value: 'file' },
-          { name: '爬取种子文件信息', value: 'file2' },
+          { name: '添加种子任务', value: 'file2' },
           { name: '检查配置', value: 'check' },
         ],
       },
@@ -673,11 +701,12 @@ async function main() {
         });
         doCates = r.doCates;
       }
-      await site.startFetchFileInfos2(doCates, ua.act == 'file');
-      if (['pthome'].indexOf(site.btCnf.key) >= 0) {
+      let mode = { file: BtCrawler.FETCH_MODE_DOWNLOAD, file2: BtCrawler.FETCH_MODE_TASK }[ua.act];
+      await site.startFetchFileInfos2(doCates, mode);
+      if (mode == BtCrawler.FETCH_MODE_DOWNLOAD && ['pthome'].indexOf(site.btCnf.key) >= 0) {
         //特殊处理
         while (true) {
-          await site.startFetchFileInfos2(doCates, ua.act == 'file');
+          await site.startFetchFileInfos2(doCates, mode);
           await sleep(5 * 60 * 1000);
         }
       }

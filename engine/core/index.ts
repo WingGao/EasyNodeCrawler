@@ -10,6 +10,7 @@ import { SiteCrawler, SiteCrawlerDiscuz } from './site';
 import { SpamRecord } from '../spam/model';
 import KVItem from './model/kv';
 import { BtSubItem, BtTorrent } from './site/bt/model';
+import Redis from './redis';
 
 async function main() {
   let argv = yargs
@@ -62,6 +63,8 @@ export async function initConfig(configPath?) {
   for (let r of [new SpamRecord(), new KVItem(), new BtTorrent(), new BtSubItem()]) {
     await r.ensureIndex();
   }
+  //redis
+  await Redis.inst().ping();
   return config;
 }
 

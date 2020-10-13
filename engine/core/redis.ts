@@ -2,6 +2,7 @@ import IORedis = require('ioredis');
 import { MainConfig } from './config';
 
 let redis: IORedis.Redis;
+let artRedis: IORedis.Redis;
 export default class Redis {
   static inst() {
     if (redis == null) {
@@ -20,7 +21,14 @@ export default class Redis {
       return false;
     }
   }
+
   static async unlock(key: string) {
     await this.inst().del(key);
   }
+}
+export function getArtRedis(): IORedis.Redis {
+  if (artRedis == null) {
+    artRedis = new IORedis(6380, '127.0.0.1', null);
+  }
+  return artRedis;
 }

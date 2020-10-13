@@ -16,10 +16,13 @@ export class BtTorrent extends EsModel<BtTorrent> {
   upNum: number; //上传数
   _isTop: boolean; //是否置顶
   _isFree: boolean; //是否免费
+  _isHot: boolean; //是否热门
   hasFiles: boolean; //知否处理过文件
   hasBt: boolean; //是否处理过种子
   deleteAt?: Date;
   _ignoreOld?: boolean; //在检查增量时是否忽略
+  _downloadNum: number; //正在下载人数
+  _completeNum: number; //已完成人数
 
   get id() {
     return this.tid;

@@ -33,7 +33,7 @@ export default function getConfig() {
   sc.limit.share = 3;
   sc.limit.vote = 2;
   sc.limit.promotionVisit = 2;
-  sc.limit.reply = 33;
+  sc.limit.reply = 10;
   sc.limit.thread = 5;
   sc.checkinUrl = '/plugin.php?id=k_misign:sign';
   sc.beforeReq = (options, done) => {

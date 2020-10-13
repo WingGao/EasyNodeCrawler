@@ -2,6 +2,7 @@ import axios from 'axios';
 import { MainConfig } from '../../config';
 
 let wgwClient;
+
 class WgwClient {
   axios = axios.create({
     baseURL: MainConfig.default().wgwHost,
@@ -16,7 +17,9 @@ class WgwClient {
     }
     return wgwClient;
   }
+
   static checkRep(rep) {}
+
   /**
    * 发送通知给自己
    * @param title
@@ -27,6 +30,14 @@ class WgwClient {
       ToUserName: '459171748@qq.com',
       Title: title,
       Context: body,
+    });
+    WgwClient.checkRep(rep);
+  }
+
+  async reseedAddTask(site: string, tid: number) {
+    let rep = await this.axios.post('/api/reseed/task/add', {
+      Site: site,
+      Tid: tid,
     });
     WgwClient.checkRep(rep);
   }

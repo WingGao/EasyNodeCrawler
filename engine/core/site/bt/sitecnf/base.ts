@@ -18,4 +18,5 @@ export class BtSiteBaseConfig {
     html?: string,
   ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> = null;
   pageStart0: boolean = false;
+  hotRate: number[] = [40, 60]; //0=30分钟 1=1小时
 }
