@@ -57,6 +57,7 @@ export default class SpamNormal {
       checkPost?: (Post) => boolean; //判断post是否符合标准
       beforeSave?: (SpamRecord) => boolean;
       pageUrlExt?: string;
+      maxPage?: number;
     },
   ): Promise<boolean> {
     cnf = _.merge(
@@ -76,6 +77,7 @@ export default class SpamNormal {
           return false; //防止屠版
         }
         for (let post of posts) {
+          if (!post.canReply) continue;
           if (cnf.checkPost && !cnf.checkPost(post)) continue;
           let record = new SpamRecord();
           record.site = post.site;
@@ -114,11 +116,13 @@ export default class SpamNormal {
       },
       {
         pageUrlExt: cnf.pageUrlExt,
+        maxPage: cnf.maxPage,
       },
     );
     return replyed;
     // await sleep(this.config.replyTimeSecond * 1000, (l) => this.crawler.logger.info(l));
   }
+
   async shuiCategoryPost(
     cateId,
     cnf: {
@@ -232,6 +236,7 @@ export default class SpamNormal {
       return false;
     }
   }
+
   async doWithLimit2(limitKey: string, maxVal: number, action: () => Promise<boolean>) {
     let currentVal = 0;
     let redisKey = `${MainConfig.default().dataPrefix}:${this.config.key}:todayLimit:${limitKey}`;
@@ -273,6 +278,7 @@ export default class SpamNormal {
       throw e;
     }
   }
+
   async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
     let maxVal = this.config.limit[limitKey];
     return this.doWithLimit2(limitKey, maxVal, action);

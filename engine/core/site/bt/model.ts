@@ -17,6 +17,7 @@ export class BtTorrent extends EsModel<BtTorrent> {
   _isTop: boolean; //是否置顶
   _isFree: boolean; //是否免费
   _isHot: boolean; //是否热门
+  _watchReason?: string; //被标记的原因
   hasFiles: boolean; //知否处理过文件
   hasBt: boolean; //是否处理过种子
   deleteAt?: Date;

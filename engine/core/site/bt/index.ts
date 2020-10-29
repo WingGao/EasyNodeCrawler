@@ -101,42 +101,47 @@ export class BtCrawler extends SiteCrawler {
       let $tr = $(v);
       let torrent = new BtTorrent();
       torrent.site = this.btCnf.key;
-      let $tds = $tr.find('>td');
-      let $tname = $tr.find('.torrentname');
-      let $a = $tname.find('a').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('details') >= 0);
-      torrent.tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
-      torrent.title = $a.attr('title').trim();
-      if (torrent.title.length == 0) {
-        debugger;
-      }
-      let $tdName = $a.closest('td');
-      $a.remove();
-      let textList = $tdName.contents().filter((j, x) => x.type == 'text');
-      let tit2Node = _.last(textList);
-      if (tit2Node != null) {
-        let tit2 = tit2Node.data.trim();
-        if (tit2.length > 0) {
-          torrent.title2 = tit2;
-        }
-      }
-      // if (torrent.title.indexOf('7 Minutes') >= 0) {
-      //   debugger;
-      // }
-
-      let ctimeT = $tds.eq(3).find('span').attr('title');
-      torrent.createTime = new Date(ctimeT);
-      let sizeT = $tds.eq(4).text().trim();
-      torrent._fsizeH = sizeT;
-      torrent.fsize = bytes(sizeT);
-      torrent.upNum = parseInt($tds.eq(5).text().trim());
-      torrent._downloadNum = parseInt($tds.eq(6).text().trim());
-      torrent._completeNum = parseInt($tds.eq(7).text().trim());
-      torrent._isTop = $tname.find('.sticky').length > 0;
-      torrent._isFree = $tname.find('.pro_free').length > 0 || $tname.find('.pro_free2up').length > 0;
+      if (this.btCnf.parsePageTr) this.btCnf.parsePageTr(this, $, $tr, torrent);
+      else this.parsePageTr($, $tr, torrent);
       posts.push(torrent);
     });
     posts.sort((a, b) => b.tid - a.tid); //从大到小
     return Promise.resolve({ $: undefined, pageMax, posts });
+  }
+
+  parsePageTr($: CheerioStatic, $tr: Cheerio, torrent: BtTorrent) {
+    let $tds = $tr.find('>td');
+    let $tname = $tr.find('.torrentname');
+    let $a = $tname.find('a').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('details') >= 0);
+    torrent.tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
+    torrent.title = $a.attr('title').trim();
+    if (torrent.title.length == 0) {
+      // debugger;
+    }
+    let $tdName = $a.closest('td');
+    $a.remove();
+    let textList = $tdName.contents().filter((j, x) => x.type == 'text');
+    let tit2Node = _.last(textList);
+    if (tit2Node != null) {
+      let tit2 = tit2Node.data.trim();
+      if (tit2.length > 0) {
+        torrent.title2 = tit2;
+      }
+    }
+    // if (torrent.title.indexOf('7 Minutes') >= 0) {
+    //   debugger;
+    // }
+
+    let ctimeT = $tds.eq(3).find('span').attr('title');
+    torrent.createTime = new Date(ctimeT);
+    let sizeT = $tds.eq(4).text().trim();
+    torrent._fsizeH = sizeT;
+    torrent.fsize = bytes(sizeT);
+    torrent.upNum = parseInt($tds.eq(5).text().trim());
+    torrent._downloadNum = parseInt($tds.eq(6).text().trim());
+    torrent._completeNum = parseInt($tds.eq(7).text().trim());
+    torrent._isTop = $tname.find('img[alt=Sticky]').length > 0;
+    torrent._isFree = $tname.find('.pro_free').length > 0 || $tname.find('.pro_free2up').length > 0;
   }
 
   async fetchSubItems(torr: BtTorrent): Promise<Array<BtSubItem>> {
@@ -381,6 +386,16 @@ export class BtCrawler extends SiteCrawler {
     return bt._isHot;
   }
 
+  watchFreeRulesCheck(bt: BtTorrent) {
+    let ok = _.find(this.btCnf.watchRules, (r: any, k) => {
+      if (r(bt)) {
+        bt._watchReason = k;
+        return true;
+      }
+    });
+    return ok != null;
+  }
+
   // 新的free种子
   async watchFree(checkHot: boolean, send = false): Promise<string> {
     await this.cache.load();
@@ -393,7 +408,7 @@ export class BtCrawler extends SiteCrawler {
         // @ts-ignore
         let bts = posts as Array<BtTorrent>;
         let oldFreeList = _.defaultTo(oldCache[cate], []);
-        let nextList = _.filter(bts, (b) => b._isFree || b._isTop || this.isHot(b));
+        let nextList = _.filter(bts, (b) => b._isFree || b._isTop || this.isHot(b) || this.watchFreeRulesCheck(b));
         let newFreeList = _.filter(nextList, (b) => oldFreeList.indexOf(b.tid) < 0);
         this.logger.info('找到新的', newFreeList.length);
         notifyHtml += `<div><h3>${cate}</h3></div>`;
@@ -575,6 +590,7 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     let pageRes = await this.fetchPage(purl);
     check.assert.greater(pageRes.pageMax, 10, '页码解析失败');
     check.assert.greater(pageRes.posts.length, 10, '列表解析失败');
+    let topPost, freePost, numPost;
     for (let post of (pageRes.posts as any) as Array<BtTorrent>) {
       this.logger.info(JSON.stringify(post));
       check.assert.greater(post.tid, 0, 'tid解析失败');
@@ -584,8 +600,14 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
       check.assert.integer(post.upNum, 'upNum 失败');
       check.assert.integer(post._downloadNum, '_downloadNum 失败');
       check.assert.integer(post._completeNum, '_completeNum 失败');
-      check.assert.greater(post.upNum + post._downloadNum + post._completeNum, 10, 'num错误');
+      if (post.upNum + post._downloadNum + post._completeNum > 1) numPost = post;
+      if (post._isFree) freePost = post;
+      if (post._isTop) topPost = post;
     }
+    //至少有一个置顶
+    check.assert.assigned(numPost, 'num失败');
+    check.assert.assigned(freePost, 'free失败');
+    check.assert.assigned(topPost, 'top失败');
   }
 }
 
@@ -686,8 +708,8 @@ async function main() {
     case 'list':
       await site.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
       break;
-    case 'file':
-    case 'file2':
+    case 'file': //直接下载
+    case 'file2': //添加任务分布式下载
       let { doCates } = argv;
       let doChoices = [{ name: 'all', value: cates }, ...cates.map((v) => ({ name: v.id, value: [v] }))];
       if (doCates) {

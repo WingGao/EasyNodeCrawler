@@ -6,8 +6,10 @@ import PterClub from './pterclub';
 import SoulVoice from './soulvoice';
 import BtSchool from './btschool';
 import Haidan from './haidan';
+import OshenPT from './oshen';
+import TjuPt from './tjupt';
 
 function getSiteConfigs() {
-  return [MTeamConfig, NicePt, PTHome, LeagueHD, PterClub, SoulVoice, BtSchool, Haidan];
+  return [MTeamConfig, NicePt, PTHome, LeagueHD, PterClub, SoulVoice, BtSchool, Haidan, OshenPT, TjuPt];
 }
 export default getSiteConfigs;

@@ -27,7 +27,9 @@ export interface IPostParseConfig {
   cachePrefix?: any; //判断是否遍历过
   cacheSecond?: number; //缓存多久，默认1小时
   poolSize?: number;
+  maxPage?: number; //最大页数
 }
+
 export abstract class SiteCrawler {
   config: SiteConfig;
   axiosInst: AxiosInstance;
@@ -131,11 +133,13 @@ export abstract class SiteCrawler {
     });
     return res;
   }
+
   abstract parsePage(
     $: CheerioStatic,
     cateId?,
     html?: string,
   ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
+
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
    * 一般爬取都是从新往旧的爬
@@ -182,6 +186,7 @@ export abstract class SiteCrawler {
     }
     this.logger.info('获取post链接完毕');
   }
+
   // 判断是否已经获取到旧文章了，如果是，则应该停止爬取
   async linkIsOld(p: Post): Promise<boolean> {
     let last = this.cache.cateLastMap[p.categoryId];
@@ -350,6 +355,7 @@ export abstract class SiteCrawler {
   }
 
   abstract getPostUrl(pid, page?: number): string;
+
   abstract getPostListUrl(cateId, page?: number, ext?: string): string;
 
   abstract async sendReply(post: Post, text: string);
@@ -364,6 +370,7 @@ export abstract class SiteCrawler {
     await this.sendReply(post, text);
     this.lastReplyTime = new Date().getTime();
   }
+
   abstract async sendPost(cp: Post, ext?: any): Promise<boolean>;
 
   async loopCategory(
@@ -410,6 +417,8 @@ export abstract class SiteCrawler {
       return ok;
     };
     for (let page = 1; page <= pageG; page++) {
+      //到达上限
+      if (cnf.maxPage != null && cnf.maxPage < page) break;
       let ok; //只对 poolSize==1的才生效
       if (page == 1 || poolSize <= 1) {
         ok = await fetchAct(page);

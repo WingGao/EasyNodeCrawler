@@ -15,6 +15,7 @@ import stringSimilarity = require('string-similarity');
 import { initConfig } from '../../index';
 import redis, { getArtRedis } from '../../redis';
 import genericPool = require('generic-pool');
+import path = require('path');
 
 /**
  * 将所有BT站点聚合
@@ -173,15 +174,7 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = [
-      'btschool',
-      'haidan',
-      'leaguehd',
-      'nicept',
-      'pterclub',
-      'soulvoice',
-      // 'mteam',
-    ];
+    let updateSites = ['btschool', 'haidan', 'leaguehd', 'nicept', 'oshen', 'pterclub', 'tjupt', 'soulvoice', 'mteam'];
     await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();
@@ -253,6 +246,10 @@ export class BtMain {
             site.logger.info('验证正确', bt.uniqId());
             //正确的种子文件
             await site.fixBtData(bt.tid, btFile);
+            // 保存文件
+            let torrentPath = path.resolve(site.config.tempPath, `${site.btCnf.key}-${bt.tid}.torrent`);
+            fs.writeFileSync(torrentPath, btFile);
+            site.logger.info('保存到', torrentPath);
           } else {
             site.logger.info('验证错误', bt.uniqId());
           }
@@ -275,8 +272,8 @@ if (require.main === module) {
     await initConfig();
     await BtMainInst.init();
     // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-    // await BtMainInst.updateSiteAll();
-    await BtMainInst.startVerifyTask();
+    await BtMainInst.updateSiteAll();
+    // await BtMainInst.startVerifyTask();
     return;
   })();
 }

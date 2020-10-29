@@ -76,6 +76,7 @@ if (require.main === module) {
                 let re = await this.spam.gerRandomReply(p, 2);
                 return re == null ? null : re.body;
               },
+              maxPage: 5,
             }),
           ),
       ]);

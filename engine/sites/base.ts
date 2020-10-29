@@ -8,6 +8,7 @@ import * as inquirer from 'inquirer';
 import _ = require('lodash');
 import { SiteConfig } from '../core/config';
 import Choice = require('inquirer/lib/objects/choice');
+import { runSafe } from '../core/utils';
 
 abstract class BaseAction {
   cnf: SiteConfig;
@@ -47,7 +48,15 @@ abstract class BaseAction {
         this.site.startWorker();
         break;
       case 'shui':
-        await this.shui();
+        await runSafe(
+          async () => {
+            await this.shui();
+          },
+          async (e) => {
+            this.site.logger.error(e);
+            return false;
+          },
+        );
         break;
       default:
         await this.onOtherAction(ua.action);
