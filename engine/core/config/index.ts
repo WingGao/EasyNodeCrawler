@@ -28,6 +28,7 @@ export class SiteConfig {
   ex?: any = {}; //额外的配置信息
   crawler?: any = {}; //爬虫参数
   proxys?: IProxy[] = []; //代理，第一个是主代理
+  useGot?: boolean;
   toZh?: boolean = false; //转为简体
   saveBody?: 0 | 1 | 2 | 3 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
   pageResultSave?: boolean = false; //是否直接保存pagelist页面的结果（只保存标题，不注重内容）

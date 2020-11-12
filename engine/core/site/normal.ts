@@ -19,6 +19,7 @@ import path = require('path');
 import ResourceTask from '../utils/resourceTask';
 import has = Reflect.has;
 import SiteCacheInfo from '../config/cache';
+import got from 'got';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -55,8 +56,13 @@ export abstract class SiteCrawler {
       baseURL: this.config.fullUrl(''),
       headers: _.merge(
         {
-          'user-agent': MainConfig.default().userAgent,
-          cookie: _.defaultTo(config.cookie, ''),
+          'User-Agent': MainConfig.default().userAgent,
+          Cookie: _.defaultTo(config.cookie, ''),
+          // 'Cache-Control': 'no-cache',
+          // 'Accept-Encoding': 'gzip, deflate, br',
+          // 'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+          // Pragma: 'no-cache',
+          Connection: 'keep-alive', //有些nginx需要该头
         },
         config.getHeaders(),
       ),
@@ -96,7 +102,24 @@ export abstract class SiteCrawler {
           break;
       }
     }
-    this.axiosInst = axios.create(axc);
+    if (config.useGot) {
+      let gotInst = got.extend({
+        prefixUrl: axc.baseURL,
+        headers: axc.headers,
+      });
+
+      this.axiosInst = {
+        get: gotInst.get,
+        post: (url, data, config) => {
+          let b = {} as any;
+          if (_.isString(data)) b.body = data;
+
+          return gotInst.post(url, b);
+        },
+      } as any;
+    } else {
+      this.axiosInst = axios.create(axc);
+    }
     // 单个站点单个队列
     this.queue = new Queue(this._queueName(), {
       connection: {

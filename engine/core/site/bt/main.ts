@@ -174,7 +174,17 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['btschool', 'haidan', 'leaguehd', 'nicept', 'oshen', 'pterclub', 'tjupt', 'soulvoice', 'mteam'];
+    let updateSites = [
+      'btschool',
+      'haidan',
+      'leaguehd',
+      // 'nicept',
+      'oshen',
+      'pterclub',
+      'tjupt',
+      'soulvoice',
+      'mteam',
+    ];
     await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();
@@ -216,6 +226,8 @@ export class BtMain {
             //没了
             return new IsNull();
           }
+          let restNum = await getArtRedis().llen(queueKey);
+          this.logger.info(`队列[${queueKey}]剩余${restNum}`);
           return taskStr;
         },
         destroy: async (r) => {},
@@ -272,8 +284,7 @@ if (require.main === module) {
     await initConfig();
     await BtMainInst.init();
     // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-    await BtMainInst.updateSiteAll();
-    // await BtMainInst.startVerifyTask();
+    await Promise.all([BtMainInst.updateSiteAll(), BtMainInst.startVerifyTask()]);
     return;
   })();
 }

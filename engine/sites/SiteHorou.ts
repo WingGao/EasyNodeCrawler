@@ -36,7 +36,7 @@ export default function getConfig() {
     maxConnections: 2,
   };
   // sc.proxys = [{ type: 'http', host: '127.0.0.1', port: 18888 }];
-  sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
+  //sc.proxys = [{ type: 'sock5', host: '127.0.0.1', port: 8023 }];
   //要爬取的板块
   sc.ex.categorys = [
     // { "id": "117", "name": "灰色汉化组", "canShow": false },
@@ -51,6 +51,7 @@ if (require.main === module) {
     async init(): Promise<any> {
       cnf = getConfig();
       this.cnf = cnf;
+      // cnf.useGot = true;
       this.site = new SiteCrawlerDiscuz(cnf);
       this.spam = new SpamNormal(cnf, this.site);
     }

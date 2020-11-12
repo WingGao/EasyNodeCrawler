@@ -20,7 +20,7 @@ export default class SpamNormal {
   constructor(config: SiteConfig, crawler: SiteCrawler) {
     this.config = config;
     this.crawler = crawler;
-    this.sport163 = new SiteSport163();
+    // this.sport163 = new SiteSport163();
   }
 
   async start(args: any) {}
