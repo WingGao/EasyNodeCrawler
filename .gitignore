@@ -1,4 +1,5 @@
 db.sqlite
 datas
 config/cookie-loc.json
+config/local.yaml
 temp/

@@ -10,7 +10,7 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
-import { addCookie, execaCn, runSafe, sleep } from '../utils';
+import { addCookie, execaCn, Progress, runSafe, sleep } from '../utils';
 import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 import * as fs from 'fs';
@@ -20,6 +20,9 @@ import ResourceTask from '../utils/resourceTask';
 import has = Reflect.has;
 import SiteCacheInfo from '../config/cache';
 import got from 'got';
+import { BtTorrent } from './bt/model';
+import ESClient from '../es';
+import WgwClient from '../utils/wgw';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -29,6 +32,12 @@ export interface IPostParseConfig {
   cacheSecond?: number; //缓存多久，默认1小时
   poolSize?: number;
   maxPage?: number; //最大页数
+}
+export interface IPostFetchConfig {
+  poolSize?: number;
+  fetchPostsQueryBuild?: (query: any) => any;
+  postNeedFetch?: (p: Post) => boolean; //true=需要爬取
+  doFetch?: (p: Post) => Promise<Post>;
 }
 
 export abstract class SiteCrawler {
@@ -210,6 +219,136 @@ export abstract class SiteCrawler {
     this.logger.info('获取post链接完毕');
   }
 
+  /**
+   * 根据数据库里的post来获取post
+   * @param cates
+   * @param cnf
+   */
+  async startFetchPosts(cates: any[], cnf: IPostFetchConfig = {}) {
+    let b = this.newPost();
+    let pg = new Progress();
+    let this_ = this;
+    //查询post
+    async function* resIter() {
+      for (let cate of cates) {
+        pg.reset();
+        let query = {
+          bool: {
+            must: [
+              {
+                term: {
+                  categoryId: cate.id,
+                },
+              },
+            ],
+            must_not: [
+              {
+                exists: {
+                  field: 'deleteAt',
+                },
+              },
+            ],
+          },
+        };
+        if (cnf.fetchPostsQueryBuild) query = cnf.fetchPostsQueryBuild(query);
+        //TODO 超时处理
+        let scrollSearch = ESClient.inst().helpers.scrollSearch({
+          index: b.indexName(),
+          scroll: '1h',
+          body: {
+            size: 20,
+            sort: [
+              {
+                createTime: {
+                  order: 'desc',
+                },
+              },
+            ],
+            query,
+          },
+        });
+
+        for await (const result of scrollSearch) {
+          if (pg.total == 0) pg.total = result.body.hits.total.value;
+          for (let bt of result.body.hits.hits) {
+            let btv = this_.newPost(bt._source);
+            yield btv;
+          }
+        }
+      }
+    }
+    //爬取post的task
+    let task = new ResourceTask({
+      createIter: resIter(),
+      max: _.defaultTo(cnf.poolSize, 3),
+      onDo: async (bt: Post) => {
+        //判断是否需要爬取
+        let needFetch = _.size(bt.body) == 0;
+        if (cnf.postNeedFetch) {
+          needFetch = cnf.postNeedFetch(bt);
+        }
+        if (!needFetch) {
+          pg.incr();
+          return;
+        }
+        if (cnf.doFetch) bt = await cnf.doFetch(bt);
+        else bt = await this.fetchPost(bt);
+        await bt.save();
+        //保存
+        // await runSafe(
+        //   async (retry) => {
+        //     switch (mode) {
+        //       case BtCrawler.FETCH_MODE_DOWNLOAD:
+        //         if (retry >= 10) {
+        //           //种子文件有问题
+        //           bt.deleteAt = new Date();
+        //           await bt.save();
+        //           this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 错误过多 删除`);
+        //           return;
+        //         }
+        //         //下载文件
+        //         await this.downloadBtFile(bt.tid, this.btCnf.downloadDelay);
+        //
+        //         this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
+        //         break;
+        //       case BtCrawler.FETCH_MODE_FETCH:
+        //         //读取详情
+        //         let flist = await this.fetchSubItems(bt);
+        //         if (flist.length > 0) {
+        //           let bodys = flist.flatMap((x) => [
+        //             {
+        //               index: {
+        //                 _index: x.indexName(),
+        //                 _id: x.uniqId(),
+        //               },
+        //             },
+        //             x.getBody(),
+        //           ]);
+        //           let createRep = await ESClient.inst().bulk({ body: bodys });
+        //           ESClient.checkRep(createRep);
+        //         }
+        //         bt.hasFiles = true;
+        //         await bt.save();
+        //         this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
+        //         break;
+        //       case BtCrawler.FETCH_MODE_TASK: //添加到task
+        //         await WgwClient.inst().reseedAddTask(bt.site, bt.tid);
+        //         this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} task ${pg.fmt()}`);
+        //         break;
+        //     }
+        //     pg.incr();
+        //   },
+        //   async (e) => {
+        //     this.logger.error(e);
+        //     return false;
+        //   },
+        // );
+      },
+    });
+    task.start();
+    await task.wait();
+    this.logger.info('startFetchPosts完成');
+  }
   // 判断是否已经获取到旧文章了，如果是，则应该停止爬取
   async linkIsOld(p: Post): Promise<boolean> {
     let last = this.cache.cateLastMap[p.categoryId];
@@ -281,8 +420,8 @@ export abstract class SiteCrawler {
     return `node_crawler:queue:${this.config.key}`;
   }
 
-  newPost() {
-    let p = new Post();
+  newPost(b?) {
+    let p = new Post(b);
     p.site = this.config.key;
     return p;
   }

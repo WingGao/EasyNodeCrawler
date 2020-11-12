@@ -35,6 +35,9 @@ export class Post extends EsModel<Post> {
     return `${this.site}-${this.id}`;
   }
 
+  /**
+   * table名称
+   */
   indexName() {
     return `${MainConfig.default().dataPrefix}post`;
   }

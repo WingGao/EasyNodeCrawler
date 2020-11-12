@@ -39,12 +39,20 @@ async function main() {
   currentSite.start();
 }
 
-export async function initConfig(configPath?) {
-  if (configPath == null) configPath = path.resolve(__dirname, '../../config/dev.yaml');
+export interface InitOption {
+  checkEs: boolean
+  checkRedis: boolean
+}
+
+export async function initConfig(configPath?, opt?: InitOption) {
+  if (configPath == null) configPath = path.resolve(__dirname, '../../config/local.yaml');
   else configPath = path.resolve(configPath);
   MainConfig.logger().info('加载配置', configPath);
   let config = MainConfig.loadYAML(configPath);
   MainConfig.default(config);
+  // opt = _.merge({
+  //   checkEs:true,checkRedis:true
+  // },opt)
   // 准备数据
   let esClient = ESClient.inst();
   let post = new Post();
