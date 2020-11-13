@@ -50,18 +50,21 @@ Haidan.parsePage = (site: BtCrawler, $: CheerioStatic, cateId?, html?: string) =
       let parseItem = ($item) => {
         let torrent = new BtTorrent();
         torrent.site = site.btCnf.key;
-        let $a = $item.find('.name_icon a').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('download') >= 0);
+        //通过下载链接判断
+        let $a = $item.find('a.action_item ').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('download') >= 0);
         let tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
         torrent.tid = tid;
         let tit2 = $item.find('.torrent_name_col a').text().trim();
         torrent.title = title + ' ' + tit2;
-        let ctimeT = $item.find('.time_col span').attr('title');
+        let ctimeT = $item.find('.time_col span').last().attr('title');
         torrent.createTime = new Date(ctimeT);
         let sizeT = $item.find('.video_size').text().trim();
         torrent._fsizeH = sizeT;
         torrent.fsize = bytes(sizeT);
         let upNum = $item.find('.seeder_col').text().trim();
         torrent.upNum = getInt(upNum);
+        torrent._downloadNum = getInt($item.find('.leecher_col').text())
+        torrent._completeNum = getInt($item.find('.snatched_col').text())
         torrent._isTop = isTop;
         torrent._isFree = $item.find('.pro_free').length > 0 || $item.find('.pro_free2up').length > 0;
         posts.push(torrent);

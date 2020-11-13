@@ -226,10 +226,9 @@ export class BtCrawler extends SiteCrawler {
   //   }
   // }
   // 获取种子文件列表，目前只收集>100M的文件
-  static FETCH_MODE_DOWNLOAD = 1; //下载种子
-  static FETCH_MODE_FETCH = 2; // 爬取文件列表
-  static FETCH_MODE_TASK = 3; // 提交到task
-  async startFetchFileInfos2(cates, mode: number) {
+
+  async startFetchFileInfos2(cates, mode?: number) {
+    if (mode == null) mode = this.btCnf.fetchFileMode;
     let b = new BtTorrent({ site: this.btCnf.key });
     let pg = new Progress();
 
@@ -298,13 +297,13 @@ export class BtCrawler extends SiteCrawler {
     let task = new ResourceTask({
       // create: () => ito.next() as any,
       createIter: resIter(),
-      max: mode == BtCrawler.FETCH_MODE_DOWNLOAD ? this.downloadThread : 3,
+      max: mode == BtSiteBaseConfig.FETCH_MODE_DOWNLOAD ? this.downloadThread : 3,
       onDo: async (bt: BtTorrent) => {
         if (bt.hasBt) return;
         await runSafe(
           async (retry) => {
             switch (mode) {
-              case BtCrawler.FETCH_MODE_DOWNLOAD:
+              case BtSiteBaseConfig.FETCH_MODE_DOWNLOAD:
                 if (retry >= 10) {
                   //种子文件有问题
                   bt.deleteAt = new Date();
@@ -317,7 +316,7 @@ export class BtCrawler extends SiteCrawler {
 
                 this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} ${pg.fmt()}`);
                 break;
-              case BtCrawler.FETCH_MODE_FETCH:
+              case BtSiteBaseConfig.FETCH_MODE_FETCH:
                 //读取详情
                 let flist = await this.fetchSubItems(bt);
                 if (flist.length > 0) {
@@ -337,7 +336,7 @@ export class BtCrawler extends SiteCrawler {
                 await bt.save();
                 this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} 添加：${flist.length} ${pg.fmt()}`);
                 break;
-              case BtCrawler.FETCH_MODE_TASK: //添加到task
+              case BtSiteBaseConfig.FETCH_MODE_TASK: //添加到task
                 await WgwClient.inst().reseedAddTask(bt.site, bt.tid);
                 this.logger.info(`startFetchFileInfos ${bt.tid} ${bt.title} task ${pg.fmt()}`);
                 break;
@@ -723,15 +722,15 @@ async function main() {
         });
         doCates = r.doCates;
       }
-      let mode = { file: BtCrawler.FETCH_MODE_DOWNLOAD, file2: BtCrawler.FETCH_MODE_TASK }[ua.act];
+      let mode = { file: BtSiteBaseConfig.FETCH_MODE_DOWNLOAD, file2: BtSiteBaseConfig.FETCH_MODE_TASK }[ua.act];
       await site.startFetchFileInfos2(doCates, mode);
-      if (mode == BtCrawler.FETCH_MODE_DOWNLOAD && ['pthome'].indexOf(site.btCnf.key) >= 0) {
-        //特殊处理
-        while (true) {
-          await site.startFetchFileInfos2(doCates, mode);
-          await sleep(5 * 60 * 1000);
-        }
-      }
+      // if (mode == BtSiteBaseConfig.FETCH_MODE_DOWNLOAD && ['pthome'].indexOf(site.btCnf.key) >= 0) {
+      //   //特殊处理
+      //   while (true) {
+      //     await site.startFetchFileInfos2(doCates, mode);
+      //     await sleep(5 * 60 * 1000);
+      //   }
+      // }
       break;
     case 'check':
       await site

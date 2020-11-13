@@ -174,23 +174,15 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = [
-      'btschool',
+    let updateSites = ['btschool',
       'haidan',
-      'leaguehd',
-      // 'nicept',
-      'oshen',
-      'pterclub',
-      'tjupt',
-      'soulvoice',
-      'mteam',
-    ];
+      'leaguehd', 'nicept', 'oshen', 'pterclub', 'tjupt', 'soulvoice', 'mteam'];
     await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();
       let cates = sc.btCnf.torrentPages.map((v) => ({ id: v, name: v }));
       await sc.startFindLinks(cates, { cacheSecond: 0, poolSize: 1 });
-      await sc.startFetchFileInfos2(cates, BtCrawler.FETCH_MODE_DOWNLOAD);
+      await sc.startFetchFileInfos2(cates);
     });
   }
 

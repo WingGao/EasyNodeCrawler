@@ -22,4 +22,9 @@ export class BtSiteBaseConfig {
   pageStart0: boolean = false;
   hotRate: number[] = [40, 60]; //0=30分钟 1=1小时
   watchRules = {}; //特殊的种子需要提醒
+  fetchFileMode = BtSiteBaseConfig.FETCH_MODE_DOWNLOAD;
+
+  static FETCH_MODE_DOWNLOAD = 1; //下载种子
+  static FETCH_MODE_FETCH = 2; // 爬取文件列表
+  static FETCH_MODE_TASK = 3; // 提交到task
 }
