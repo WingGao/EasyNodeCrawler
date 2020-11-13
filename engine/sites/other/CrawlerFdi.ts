@@ -4,6 +4,8 @@ import { IPostParseConfig } from '../../core/site/normal';
 import { initConfig } from '../../core';
 import { MainConfig, SiteConfig } from '../../core/config';
 import _ = require('lodash');
+import * as fs from 'fs';
+import * as path from 'path';
 
 class PostP extends Post {
   indexName(): string {
@@ -54,7 +56,19 @@ class CrawlerFdi extends SiteCrawler {
   }
 
   async parsePost(post: Post, $: CheerioStatic, pcf?: IPostParseConfig): Promise<Post> {
-    return Promise.resolve(undefined);
+    post._ext = JSON.parse(post.bodyBin);
+    let xiang_main = $('.xiang_main');
+    let main_tits = xiang_main.find('.main_tits').first();
+    main_tits.children().each((i, child) => {
+      let $child = $(child);
+      let $divs = $child.children('div');
+      let key = $divs.eq(0).text().trim();
+      let val = $divs.eq(1).text().trim();
+      post._ext[key] = val;
+    });
+    post.body = 'done';
+    post.bodyBin = JSON.stringify(post._ext);
+    return post;
   }
 
   async sendPost(cp: Post, ext?: any): Promise<boolean> {
@@ -75,6 +89,49 @@ class CrawlerFdi extends SiteCrawler {
       ),
     );
   }
+
+  async toCSV() {
+    const XLSX = require('xlsx');
+    // let workbook = XLSX.cre('test.xlsx');
+    // let f = fs.createWriteStream('H:\\temp\\fdi.csv');
+    let head = [
+      'id',
+      '项目名称',
+      '发布日期',
+      '项目分类',
+      '投资方式',
+      '项目类型',
+      '所属行业',
+      '项目地点',
+      '项目有效期',
+      '项目资金类型',
+      '项目总金额',
+      '拟吸引投资总金额',
+      '项目内容描述',
+      '项目标记',
+    ];
+    let rows = [head];
+    await this.newPost().scrollSearch(
+      {
+        exists: {
+          field: 'body',
+        },
+      },
+      async (p, pg) => {
+        let ex = JSON.parse(p.bodyBin);
+        let row = _.map(head, (v, k) => {
+          if (k == 0) return p.id;
+          return ex[v];
+        });
+        rows.push(row);
+        this.logger.info(`处理 ${p.id} ${pg.fmt()}`);
+      },
+    );
+    let sheet = XLSX.utils.aoa_to_sheet(rows);
+    let wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, sheet, 'default');
+    XLSX.writeFile(wb, 'H:\\temp\\fdi.xlsb');
+  }
 }
 
 async function main() {
@@ -89,11 +146,13 @@ async function main() {
   await site.init();
   await new PostP().ensureIndex();
   let cates = [{ id: 1 }];
-  // await site.startFindLinks(, { poolSize: 1 });
+  // await site.startFindLinks(cates, { poolSize: 1 });
+  // return;
+  return await site.toCSV();
   await site.startFetchPosts(cates, {
     poolSize: 1,
     fetchPostsQueryBuild(q) {
-      q.must_not.push({
+      q.bool.must_not.push({
         exists: {
           field: 'body',
         },

@@ -33,6 +33,7 @@ export interface IPostParseConfig {
   poolSize?: number;
   maxPage?: number; //最大页数
 }
+
 export interface IPostFetchConfig {
   poolSize?: number;
   fetchPostsQueryBuild?: (query: any) => any;
@@ -228,55 +229,61 @@ export abstract class SiteCrawler {
     let b = this.newPost();
     let pg = new Progress();
     let this_ = this;
+
     //查询post
     async function* resIter() {
-      for (let cate of cates) {
-        pg.reset();
-        let query = {
-          bool: {
-            must: [
-              {
-                term: {
-                  categoryId: cate.id,
+      try {
+        for (let cate of cates) {
+          pg.reset();
+          let query = {
+            bool: {
+              must: [
+                {
+                  term: {
+                    categoryId: cate.id,
+                  },
                 },
-              },
-            ],
-            must_not: [
-              {
-                exists: {
-                  field: 'deleteAt',
+              ],
+              must_not: [
+                {
+                  exists: {
+                    field: 'deleteAt',
+                  },
                 },
-              },
-            ],
-          },
-        };
-        if (cnf.fetchPostsQueryBuild) query = cnf.fetchPostsQueryBuild(query);
-        //TODO 超时处理
-        let scrollSearch = ESClient.inst().helpers.scrollSearch({
-          index: b.indexName(),
-          scroll: '1h',
-          body: {
-            size: 20,
-            sort: [
-              {
-                createTime: {
-                  order: 'desc',
+              ],
+            },
+          };
+          if (cnf.fetchPostsQueryBuild) query = cnf.fetchPostsQueryBuild(query);
+          //TODO 超时处理
+          let scrollSearch = ESClient.inst().helpers.scrollSearch({
+            index: b.indexName(),
+            scroll: '1h',
+            body: {
+              size: 20,
+              sort: [
+                {
+                  createTime: {
+                    order: 'desc',
+                  },
                 },
-              },
-            ],
-            query,
-          },
-        });
+              ],
+              query,
+            },
+          });
 
-        for await (const result of scrollSearch) {
-          if (pg.total == 0) pg.total = result.body.hits.total.value;
-          for (let bt of result.body.hits.hits) {
-            let btv = this_.newPost(bt._source);
-            yield btv;
+          for await (const result of scrollSearch) {
+            if (pg.total == 0) pg.total = result.body.hits.total.value;
+            for (let bt of result.body.hits.hits) {
+              let btv = this_.newPost(bt._source);
+              yield btv;
+            }
           }
         }
+      } catch (e) {
+        console.error(e);
       }
     }
+
     //爬取post的task
     let task = new ResourceTask({
       createIter: resIter(),
@@ -287,13 +294,17 @@ export abstract class SiteCrawler {
         if (cnf.postNeedFetch) {
           needFetch = cnf.postNeedFetch(bt);
         }
-        if (!needFetch) {
-          pg.incr();
-          return;
+        pg.incr();
+        if (needFetch) {
+          this_.logger.info('爬取', this_.getPostUrl(bt.id), pg.fmt());
+          if (cnf.doFetch) bt = await cnf.doFetch(bt);
+          else bt = await this.fetchPost(bt);
+          this_.logger.info('保存', bt.uniqId(), pg.fmt());
+          await bt.save();
+        } else {
+          this_.logger.info('跳过', bt.uniqId(), pg.fmt());
         }
-        if (cnf.doFetch) bt = await cnf.doFetch(bt);
-        else bt = await this.fetchPost(bt);
-        await bt.save();
+
         //保存
         // await runSafe(
         //   async (retry) => {
@@ -349,6 +360,7 @@ export abstract class SiteCrawler {
     await task.wait();
     this.logger.info('startFetchPosts完成');
   }
+
   // 判断是否已经获取到旧文章了，如果是，则应该停止爬取
   async linkIsOld(p: Post): Promise<boolean> {
     let last = this.cache.cateLastMap[p.categoryId];

@@ -2,6 +2,7 @@ import { Client } from '@elastic/elasticsearch';
 import { MainConfig } from '../config';
 import _ = require('lodash');
 import { ApiResponse } from '@elastic/elasticsearch/lib/Transport';
+import { Progress } from '../utils';
 
 let mainClient: Client = null;
 export default class ESClient {
@@ -123,6 +124,39 @@ export abstract class EsModel<T> {
     ) {
       MainConfig.logger().info('创建索引', this.indexName());
       let rep = await this._createIndex();
+    }
+  }
+
+  /**
+   * 单线程的遍历
+   * @param query
+   * @param onItem
+   */
+  async scrollSearch(query: any, onItem: (p: T, pg: Progress) => Promise<void>) {
+    let pg = new Progress();
+    let ssp = ESClient.inst().helpers.scrollSearch({
+      index: this.indexName(),
+      scroll: '1h',
+      body: {
+        size: 20,
+        sort: [
+          {
+            createTime: {
+              order: 'desc',
+            },
+          },
+        ],
+        query,
+      },
+    });
+
+    for await (const result of ssp) {
+      if (pg.total == 0) pg.total = result.body.hits.total.value;
+      for (let bt of result.body.hits.hits) {
+        let btv = this.constructor(bt._source);
+        pg.incr();
+        await onItem(btv, pg);
+      }
     }
   }
 }
