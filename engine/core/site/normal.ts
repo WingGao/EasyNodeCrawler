@@ -11,18 +11,14 @@ import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
 import { addCookie, execaCn, Progress, runSafe, sleep } from '../utils';
-import { scalarOptions } from 'yaml';
 import * as moment from 'moment';
 import * as fs from 'fs';
 import cookies from '../../sites/cookie';
 import path = require('path');
 import ResourceTask from '../utils/resourceTask';
-import has = Reflect.has;
 import SiteCacheInfo from '../config/cache';
 import got from 'got';
-import { BtTorrent } from './bt/model';
 import ESClient from '../es';
-import WgwClient from '../utils/wgw';
 
 export interface IPostParseConfig {
   onlyMain?: boolean;
@@ -207,8 +203,11 @@ export abstract class SiteCrawler {
             //添加到队列
             ps.push(this.queueAddPost(p));
           }
-          this.logger.info('添加任务', ps.length);
-          await Promise.all(ps);
+          let orLen = ps.length;
+          this.logger.info('获取任务', orLen);
+          let addArr = await Promise.all(ps);
+          let addLen = _.filter(addArr, (v) => v != null).length;
+          this.logger.info(`添加任务${addLen}/${orLen}`);
           return ok;
         },
         cateCnf,
@@ -442,11 +441,16 @@ export abstract class SiteCrawler {
    * 将post添加到队列
    * @param post
    */
-  queueAddPost(post: Post) {
+  async queueAddPost(post: Post) {
     if (this.config.pageResultSave) {
-      return post.save();
+      // 先判断是否存在
+      if ((await post.getById(post.uniqId())) != null) {
+        // this.logger.info('Post已存在', post.uniqId());
+        return;
+      }
+      return await post.save();
     }
-    return this.queue.add('post', post, {
+    return await this.queue.add('post', post, {
       attempts: 3,
       backoff: {
         type: 'exponential',
@@ -576,9 +580,10 @@ export abstract class SiteCrawler {
           }
           let { posts, $, pageMax } = await this.fetchPage(purl, cateId, { axConfig: cnf.axConfig });
           if (page == 1) {
+            //只赋值一次
             this.logger.debug(`最大页数 ${pageMax}`);
+            pageG = pageMax;
           }
-          pageG = pageMax;
           ok = await cb(posts);
           if (visitKey) await Redis.inst().setex(visitKey, _.defaultTo(cnf.cacheSecond, 3600), 1);
         },

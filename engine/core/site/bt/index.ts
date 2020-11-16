@@ -20,6 +20,7 @@ import cookies from '../../../sites/cookie';
 import * as path from 'path';
 import * as yargs from 'yargs';
 import moment = require('moment');
+import qs = require('qs');
 
 //NexusPhp
 export class BtCrawler extends SiteCrawler {
@@ -84,17 +85,29 @@ export class BtCrawler extends SiteCrawler {
     }
     let $form = $('#form_torrent');
     // 获取页数
-    let $pages = $('.torrents').siblings('p').find('a');
     let pageMax = 0;
-    $pages.each((i, v) => {
-      let g = /page=(\d+)/.exec(v.attribs.href);
-      if (g == null) return;
-      let page = parseInt(g[1]);
-      if (!isNaN(page)) {
-        pageMax = Math.max(pageMax, page);
-      }
-    });
-    pageMax++;
+    if (this.btCnf.parsePageNum) {
+      pageMax = this.btCnf.parsePageNum(this, $);
+    } else {
+      let $pages = $('.torrents').siblings('p').find('a');
+      $pages.each((i, v) => {
+        let pageu = v.attribs.href;
+        if (_.size(pageu) == 0) return;
+        pageu = pageu.split('?')[1];
+        let para = qs.parse(pageu) as any;
+        if (para.page == null) return;
+        let page;
+        if (!_.isString(para.page)) page = parseInt(_.last(para.page));
+        else page = parseInt(para.page);
+        // let g = /page=(\d+)/.exec(v.attribs.href);
+        // if (g == null) return;
+        // let page = parseInt(g[1]);
+        if (!isNaN(page)) {
+          pageMax = Math.max(pageMax, page);
+        }
+      });
+      pageMax++;
+    }
     let posts = [];
     $('.torrents > tbody > tr').each((i, v) => {
       if (i == 0) return;
@@ -583,30 +596,44 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
   async checkConfig() {
     this.logger.info('检查cookie');
     await this.checkCookie();
-    // 检查页
-    this.logger.info('检查列表获取');
-    let purl = this.getPostListUrl(this.btCnf.torrentPages[0], 1);
-    let pageRes = await this.fetchPage(purl);
-    check.assert.greater(pageRes.pageMax, 10, '页码解析失败');
-    check.assert.greater(pageRes.posts.length, 10, '列表解析失败');
-    let topPost, freePost, numPost;
-    for (let post of (pageRes.posts as any) as Array<BtTorrent>) {
-      this.logger.info(JSON.stringify(post));
-      check.assert.greater(post.tid, 0, 'tid解析失败');
-      check.assert.nonEmptyString(post.title, '标题为空');
-      check.assert.nonEmptyString(post.site, 'site为空');
-      check.assert.greater(post.createTime.getFullYear(), 1999, 'createTime 失败');
-      check.assert.integer(post.upNum, 'upNum 失败');
-      check.assert.integer(post._downloadNum, '_downloadNum 失败');
-      check.assert.integer(post._completeNum, '_completeNum 失败');
-      if (post.upNum + post._downloadNum + post._completeNum > 1) numPost = post;
-      if (post._isFree) freePost = post;
-      if (post._isTop) topPost = post;
+    let checkCate = async (cate) => {
+      let tag = `[${cate}]`;
+      // 检查页
+      this.logger.info(tag, '检查列表获取');
+      let purl = this.getPostListUrl(this.btCnf.torrentPages[0], 1);
+      let pageRes = await this.fetchPage(purl);
+      this.logger.info(tag, '最大页数', pageRes.pageMax);
+      check.assert.greater(pageRes.pageMax, 3, tag + '页码解析失败');
+      check.assert.greater(pageRes.posts.length, 10, tag + '列表解析失败');
+      let topPost, freePost, numPost;
+      for (let post of (pageRes.posts as any) as Array<BtTorrent>) {
+        this.logger.info(JSON.stringify(post));
+        check.assert.greater(post.tid, 0, tag + 'tid解析失败');
+        check.assert.nonEmptyString(post.title, tag + '标题为空');
+        check.assert.nonEmptyString(post.site, tag + 'site为空');
+        check.assert.greater(post.createTime.getFullYear(), 1999, tag + 'createTime 失败');
+        check.assert.integer(post.upNum, tag + 'upNum 失败');
+        check.assert.integer(post._downloadNum, tag + '_downloadNum 失败');
+        check.assert.integer(post._completeNum, tag + '_completeNum 失败');
+        if (post.upNum + post._downloadNum + post._completeNum > 1) numPost = post;
+        if (post._isFree) freePost = post;
+        if (post._isTop) topPost = post;
+      }
+      //至少有一个置顶
+      check.assert.assigned(numPost, tag + 'num失败');
+      check.assert.assigned(freePost, tag + 'free失败');
+      check.assert.assigned(topPost, tag + 'top失败');
+    };
+    // 检查全目录
+    let oneByOne = true;
+    oneByOne = false;
+    let ps = [];
+    for (let cate of this.btCnf.torrentPages) {
+      let p = checkCate(cate);
+      if (oneByOne) await p;
+      else ps.push(p);
     }
-    //至少有一个置顶
-    check.assert.assigned(numPost, 'num失败');
-    check.assert.assigned(freePost, 'free失败');
-    check.assert.assigned(topPost, 'top失败');
+    await Promise.all(ps);
   }
 }
 

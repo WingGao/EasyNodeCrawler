@@ -174,9 +174,17 @@ export class BtMain {
 
   async updateSiteAll() {
     // 已经全量更新完的站点
-    let updateSites = ['btschool',
+    let updateSites = [
+      'btschool',
       'haidan',
-      'leaguehd', 'nicept', 'oshen', 'pterclub', 'tjupt', 'soulvoice', 'mteam'];
+      'leaguehd',
+      // 'nicept',
+      'oshen',
+      'pterclub',
+      'tjupt',
+      'soulvoice',
+      'mteam',
+    ];
     await this.initSites(updateSites);
     await this.loopSites(updateSites, async (sc) => {
       await sc.checkin();

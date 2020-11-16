@@ -18,6 +18,7 @@ export class BtSiteBaseConfig {
     cateId?,
     html?: string,
   ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> = null;
+  parsePageNum?: (bt: BtCrawler, $: CheerioStatic) => number = null; //自定义页数解析，自然数
   parsePageTr?: (bt: BtCrawler, $: CheerioStatic, $tr: Cheerio, torrent: BtTorrent) => void = null;
   pageStart0: boolean = false;
   hotRate: number[] = [40, 60]; //0=30分钟 1=1小时
