@@ -43,7 +43,7 @@ describe('bt', () => {
     expect(p.hash).toEqual('e3374e621af2f5e4483115abcd5d520165b7d1c2');
   });
   test('watchFree', async () => {
-    let html = await site.watchFree();
+    let html = await site.watchFree(false);
     expect(html.length).toBeGreaterThan(1);
   });
 

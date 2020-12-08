@@ -12,6 +12,7 @@ export class BtSiteBaseConfig {
   downloadDelay: number = 0;
   checkin: boolean = true;
   doCheckin?: (bt: BtCrawler) => Promise<boolean> = null;
+  checkCookie?: (bt: BtCrawler) => Promise<boolean> = null; //自定义验证cookie
   parsePage?: (
     bt: BtCrawler,
     $: CheerioStatic,

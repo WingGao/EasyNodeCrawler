@@ -178,8 +178,8 @@ export class BtMain {
       'btschool',
       'haidan',
       'leaguehd',
-      // 'nicept',
-      'oshen',
+      'nicept',
+      // 'oshen',
       'pterclub',
       'tjupt',
       'soulvoice',
@@ -252,6 +252,9 @@ export class BtMain {
         site.logger.info('验证', bt.uniqId());
         try {
           let res: BtTorrent = (await site.fetchPost(bt as any)) as any;
+          if (res.hash == BtTorrent.NOT_FOUND) {
+            //该种子不存在
+          }
           let btFile = Buffer.from(task.file64, 'base64');
           let tInfo = parseTorrent(btFile);
           if (res.hash == tInfo.infoHash) {

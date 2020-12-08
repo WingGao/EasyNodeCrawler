@@ -10,7 +10,7 @@ import { Queue, QueueEvents, Worker } from 'bullmq';
 import Redis from '../redis';
 import cheerio = require('cheerio');
 import { WebDriver } from 'selenium-webdriver';
-import { addCookie, execaCn, Progress, runSafe, sleep } from '../utils';
+import { addCookie, execaCn, Progress, runSafe, sleep, waitUntilLoad } from '../utils';
 import * as moment from 'moment';
 import * as fs from 'fs';
 import cookies from '../../sites/cookie';
@@ -137,7 +137,16 @@ export abstract class SiteCrawler {
   async init() {
     this.cache = new SiteCacheInfo();
     await this.cache.load(this.config.key);
+    if (this.config.selenium) {
+      await this.getSelenium();
+    }
     await this.checkCookie();
+  }
+
+  async checkIP() {
+    let rep = await this.axiosInst.get('https://202020.ip138.com/');
+    let g = /(\d+\.\d+\.\d+\.\d+)<\/a>/.exec(rep.data);
+    return g[1];
   }
 
   abstract checkPermission($): boolean;
@@ -148,7 +157,7 @@ export abstract class SiteCrawler {
     cnf?: { axConfig?: any },
   ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
     this.logger.info('获取', pageUrl);
-    let rep = await this.axiosInst.get(pageUrl, cnf ? cnf.axConfig : undefined);
+    let rep = await this.autoFetchPage(pageUrl, cnf ? cnf.axConfig : undefined);
     let $ = cheerio.load(rep.data);
     if (!this.checkPermission($)) {
       //没有权限
@@ -381,6 +390,19 @@ export abstract class SiteCrawler {
     });
     return data;
   }
+  //自动判断获取页面的方式
+  async autoFetchPage(url, cnf?) {
+    if (this.config.selenium) {
+      let d = await this.getSelenium();
+      let fu = this.config.fullUrl(url);
+      await d.get(fu);
+      await waitUntilLoad(d);
+      let html = await d.getPageSource();
+      return { data: html };
+    } else {
+      return await this.axiosInst.get(url, cnf);
+    }
+  }
 
   /**
    * 开启爬取
@@ -525,7 +547,11 @@ export abstract class SiteCrawler {
   async getSelenium(): Promise<WebDriver> {
     if (this.driver == null) {
       const { Builder, By, Key, until } = require('selenium-webdriver');
-      let driver = await new Builder().forBrowser('firefox').build();
+      const { Options } = require('selenium-webdriver/firefox');
+      let profile = new Options();
+      //禁止图片
+      profile.setPreference('permissions.default.image', 2);
+      let driver = await new Builder().forBrowser('firefox').setFirefoxOptions(profile).build();
       await addCookie(driver, this.config.cookie, this.config.fullUrl('/'));
       this.driver = driver;
     }

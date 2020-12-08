@@ -26,6 +26,8 @@ export default class ESClient {
 }
 
 export abstract class EsModel<T> {
+  deleteAt?: Date;
+
   constructor(props?: Partial<T>) {
     if (props) _.merge(this, props);
   }
@@ -109,6 +111,29 @@ export abstract class EsModel<T> {
       _.merge(this, p);
     } else {
       throw new Error(res.body.result);
+    }
+  }
+
+  async deleteById(esId = null, soft = true) {
+    if (esId == null) esId = this.uniqId();
+    let res;
+    if (soft) {
+      res = await ESClient.inst().update({
+        index: this.indexName(),
+        id: esId,
+        body: { doc: { deleteAt: new Date() } },
+      });
+    } else {
+      res = await ESClient.inst().delete({
+        index: this.indexName(),
+        id: esId,
+      });
+    }
+    if (res.statusCode == 200) {
+      return true;
+    } else {
+      throw new Error(res.body.result);
+      return false;
     }
   }
 

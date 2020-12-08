@@ -46,11 +46,10 @@ export class BtCrawler extends SiteCrawler {
     await this.ensureTempDir();
   }
 
-  async checkCookie(): Promise<any> {
-    let rep = await this.axiosInst.get('/usercp.php');
-    let ok = rep.data.indexOf(this.btCnf.myUserId) > 0;
+  parseCheckCookie(data) {
+    let ok = data.indexOf(this.btCnf.myUserId) > 0;
     if (ok) {
-      let $ = cheerio.load(rep.data);
+      let $ = cheerio.load(data);
       let infoTxt = $('#info_block').text();
       this.isCheckIn = /簽到已得|签到已得/.test(infoTxt);
     } else {
@@ -58,6 +57,13 @@ export class BtCrawler extends SiteCrawler {
       throw Error('未登录');
     }
     return ok;
+  }
+
+  async checkCookie(): Promise<any> {
+    // let ip = this.checkIP();
+    if (this.btCnf.checkCookie) return await this.btCnf.checkCookie(this);
+    let rep = await this.axiosInst.get('/usercp.php');
+    return this.parseCheckCookie(rep.data);
   }
 
   checkPermission($): boolean {
@@ -370,9 +376,16 @@ export class BtCrawler extends SiteCrawler {
 
   async parsePost(post, $, pcf?: IPostParseConfig): Promise<Post> {
     let bt = post as BtTorrent;
-    let $hash = $('#showfl').closest('tr');
-    let hash = /Hash[^\w]+([a-z0-9]{10,})[^\w]/i.exec($hash.text());
-    bt.hash = hash[1];
+    let $top = $('#top');
+    if ($top.length == 0) {
+      //不存在
+      this.logger.error(`种子[${bt.id}]详情不存在`);
+      bt.hash = BtTorrent.NOT_FOUND;
+    } else {
+      let $hash = $('#showfl').closest('tr');
+      let hash = /Hash[^\w]+([a-z0-9]{10,})[^\w]/i.exec($hash.text());
+      bt.hash = hash[1];
+    }
     return bt as any;
   }
 

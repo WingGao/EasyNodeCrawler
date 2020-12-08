@@ -4,6 +4,7 @@ import crypto = require('crypto');
 
 // 需要和Post保持一致
 export class BtTorrent extends EsModel<BtTorrent> {
+  static NOT_FOUND = 'NOT_FOUND';
   tid: number; //种子id
   site: string;
   categoryId: string;
@@ -20,7 +21,6 @@ export class BtTorrent extends EsModel<BtTorrent> {
   _watchReason?: string; //被标记的原因
   hasFiles: boolean; //知否处理过文件
   hasBt: boolean; //是否处理过种子
-  deleteAt?: Date;
   _ignoreOld?: boolean; //在检查增量时是否忽略
   _downloadNum: number; //正在下载人数
   _completeNum: number; //已完成人数
