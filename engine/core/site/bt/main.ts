@@ -180,6 +180,7 @@ export class BtMain {
       'leaguehd',
       'nicept',
       // 'oshen',
+      'pthome',
       'pterclub',
       'tjupt',
       'soulvoice',
@@ -254,6 +255,8 @@ export class BtMain {
           let res: BtTorrent = (await site.fetchPost(bt as any)) as any;
           if (res.hash == BtTorrent.NOT_FOUND) {
             //该种子不存在
+            await res.deleteById();
+            return;
           }
           let btFile = Buffer.from(task.file64, 'base64');
           let tInfo = parseTorrent(btFile);
