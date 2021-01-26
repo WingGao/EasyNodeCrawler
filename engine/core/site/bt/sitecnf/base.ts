@@ -3,6 +3,7 @@ import { BtTorrent } from '../model';
 
 export class BtSiteBaseConfig {
   key: string;
+  alias: string[] = []; //key的别名，用于网站改名
   host: string;
   https: boolean = true;
   torrentPages: Array<string> = [];

@@ -46,13 +46,16 @@ Haidan.parsePage = (site: BtCrawler, $: CheerioStatic, cateId?, html?: string) =
       //   torrent.ti
       // }else{
       // 目前不区分正副标题
-      let isTop = $tr.find('.free_bg').length > 0 || $tr.find('.twoup_bg').length > 0;
+      let isTop = $tr.find('.sticky_flag').length > 0;
       let parseItem = ($item) => {
         let torrent = new BtTorrent();
         torrent.site = site.btCnf.key;
-        //通过下载链接判断
-        let $a = $item.find('a.action_item ').filter((j, x) => _.get(x.attribs, 'href', '').indexOf('download') >= 0);
-        let tid = parseInt(/id=(\d+)/.exec($a.attr('href'))[1]);
+        // 通过详情链接判断
+        // details.php?group_id=12992&torrent_id=12519
+        let $a = $item
+          .find('.torrent_name_col.torrent_cell a')
+          .filter((j, x) => _.get(x.attribs, 'href', '').indexOf('torrent_id') >= 0);
+        let tid = parseInt(/torrent_id=(\d+)/.exec($a.attr('href'))[1]);
         torrent.tid = tid;
         let tit2 = $item.find('.torrent_name_col a').text().trim();
         torrent.title = title + ' ' + tit2;
@@ -63,8 +66,8 @@ Haidan.parsePage = (site: BtCrawler, $: CheerioStatic, cateId?, html?: string) =
         torrent.fsize = bytes(sizeT);
         let upNum = $item.find('.seeder_col').text().trim();
         torrent.upNum = getInt(upNum);
-        torrent._downloadNum = getInt($item.find('.leecher_col').text())
-        torrent._completeNum = getInt($item.find('.snatched_col').text())
+        torrent._downloadNum = getInt($item.find('.leecher_col').text());
+        torrent._completeNum = getInt($item.find('.snatched_col').text());
         torrent._isTop = isTop;
         torrent._isFree = $item.find('.pro_free').length > 0 || $item.find('.pro_free2up').length > 0;
         posts.push(torrent);

@@ -12,6 +12,7 @@ import _ = require('lodash');
 import SpamNormal from '../spam/site/normal';
 import BaseAction from './base';
 import cheerio = require('cheerio');
+import { getInt } from '../core/utils';
 
 export default function getConfig() {
   let sc = new SiteConfig('www.horou.com');
@@ -58,6 +59,7 @@ if (require.main === module) {
     async shui() {
       cnf.saveBody = 0;
       cnf.replyTimeSecond = (60 * 60) / 20; //1小时15帖
+      let lastKuangTime = 0;
       await this.spam.shuiTask([
         () =>
           this.spam.doWithLimit2('checkin', 1, async () => {
@@ -68,6 +70,15 @@ if (require.main === module) {
           }),
         //检查任务
         () => this.task(26, false),
+        // 检查圹
+        async () => {
+          let now = new Date().getTime();
+          if (now - lastKuangTime >= 2 * 3600 * 1000) {
+            lastKuangTime = now;
+            await this.kuang();
+          }
+          return false;
+        },
         //河洛茶馆
         () =>
           this.spam.doWithLimit('reply', () =>
@@ -90,7 +101,38 @@ if (require.main === module) {
       // return rep.data;
       return false;
     }
+    // 矿场 自动领取+兑换
+    async kuang() {
+      this.site.logger.info('检查矿场');
+      let rep = await this.site.axiosInst.get('/kuang.php');
+      let $ = cheerio.load(rep.data);
+      let $form = $('#kaicaiform_1');
+      let $formHash = $form.find('input').filter((i, x) => _.get(x.attribs, 'name') == 'formhash');
+      let hash = $formHash.attr('value');
+      let pTxtDoms = $form.find('p.txt');
+      for (let i = 0; i < pTxtDoms.length; i++) {
+        let p = pTxtDoms[i];
+        let txt = $(p).text();
+        if (txt.indexOf('采得下品灵矿') >= 0) {
+          this.site.logger.info(txt);
+          let num = getInt(txt);
+          if (num > 0) {
+            // 领取
+            this.site.logger.info('领取', num);
+            let linRep = await this.site.axiosInst.get(`/kuang.php?mod=mining&op=lingqu&mineid=1&formhash=${hash}`);
+            this.site.logger.info(linRep.data);
+          }
+        }
+      }
+      // 兑换
+    }
   }
 
-  new A().start();
+  let siteA = new A();
+  // (async () => {
+  //   await siteA.prepare();
+  //   await siteA.kuang();
+  // })();
+
+  siteA.start();
 }

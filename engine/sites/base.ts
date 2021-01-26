@@ -16,13 +16,15 @@ abstract class BaseAction {
   spam: SpamNormal;
   otherAction: Array<Choice> = [];
   abstract init(): Promise<any>;
-  async shui() {}
-  async onOtherAction(act: string) {}
-  async start() {
+  async prepare() {
     await initConfig();
     await this.init();
     await this.site.init();
-
+  }
+  async shui() {}
+  async onOtherAction(act: string) {}
+  async start() {
+    await this.prepare();
     let ua = { action: null };
     if (_.size(yargs.argv._) == 0) {
       ua = await inquirer.prompt({

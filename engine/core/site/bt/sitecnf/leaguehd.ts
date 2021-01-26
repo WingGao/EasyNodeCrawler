@@ -4,9 +4,12 @@ import { BtSiteBaseConfig } from './base';
 import { BtCrawler } from '../index';
 import { BtTorrent } from '../model';
 
+//柠檬
 const LeagueHD = _.merge(new BtSiteBaseConfig(), {
   key: 'leaguehd',
-  host: 'leaguehd.com',
+  alias: ['lemonhd'],
+  // host: 'leaguehd.com', 2020年12月15日10:47:25
+  host: 'lemonhd.org',
   torrentPages: [
     //2020年11月16日11:09:29 改版了
     '/torrents_movie.php',
