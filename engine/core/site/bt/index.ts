@@ -71,9 +71,7 @@ export class BtCrawler extends SiteCrawler {
   }
 
   getPostListUrl(cateId, page: number = 1, ext?: string): string {
-    return this.config.fullUrl(
-      `${cateId}${cateId.indexOf('?') >= 0 ? '' : '?'}&page=${page - 1}${_.defaultTo(ext, '')}`,
-    );
+    return this.config.fullUrl(`${cateId}${cateId.indexOf('?') >= 0 ? '' : '?'}&page=${page - 1}${_.defaultTo(ext, '')}`);
   }
 
   getPostUrl(pid, page?: number): string {
@@ -81,15 +79,13 @@ export class BtCrawler extends SiteCrawler {
     // return this.config.fullUrl(`//viewfilelist.php?id=${pid}`);
   }
 
-  parsePage(
-    $: CheerioStatic,
-    cateId?,
-    html?: string,
-  ): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
+  parsePage($: CheerioStatic, cateId?, html?: string): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
     if (this.btCnf.parsePage != null) {
       return this.btCnf.parsePage(this, $, cateId, html);
     }
-    let $form = $('#form_torrent');
+    return this.parsePageNormal($, cateId, html);
+  }
+  parsePageNumNormal($: CheerioStatic) {
     // 获取页数
     let pageMax = 0;
     if (this.btCnf.parsePageNum) {
@@ -114,12 +110,19 @@ export class BtCrawler extends SiteCrawler {
       });
       pageMax++;
     }
+    return pageMax;
+  }
+  // 通用解析pagelist
+  parsePageNormal($: CheerioStatic, cateId?, html?: string): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
+    let $form = $('#form_torrent');
+    let pageMax = this.parsePageNumNormal($);
     let posts = [];
     $('.torrents > tbody > tr').each((i, v) => {
       if (i == 0) return;
       let $tr = $(v);
       let torrent = new BtTorrent();
       torrent.site = this.btCnf.key;
+      torrent.categoryId = cateId;
       if (this.btCnf.parsePageTr) this.btCnf.parsePageTr(this, $, $tr, torrent);
       else this.parsePageTr($, $tr, torrent);
       posts.push(torrent);
@@ -128,6 +131,13 @@ export class BtCrawler extends SiteCrawler {
     return Promise.resolve({ $: undefined, pageMax, posts });
   }
 
+  /**
+   * 解析列表页，获取种子信息
+   * 对于按电源聚合多个种子的情况，要特殊处理
+   * @param $
+   * @param $tr
+   * @param torrent
+   */
   parsePageTr($: CheerioStatic, $tr: Cheerio, torrent: BtTorrent) {
     let $tds = $tr.find('>td');
     let $tname = $tr.find('.torrentname');
@@ -504,10 +514,7 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
     let btFile = fs.readFileSync(dFile as string);
     await this.fixBtData(tid, btFile).catch((e) => {
       // if (e.message.indexOf('Invalid data: Missing delimiter') >= 0) {
-      if (
-        e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0 ||
-        e.stack.indexOf(path.join('node_modules', 'bencode')) >= 0
-      ) {
+      if (e.stack.indexOf(path.join('node_modules', 'parse-torrent')) >= 0 || e.stack.indexOf(path.join('node_modules', 'bencode')) >= 0) {
         //种子文件有问题重新下载
         this.logger.error('种子文件错误', dFile);
         fs.unlinkSync(dFile as string);
@@ -613,8 +620,9 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
       let tag = `[${cate}]`;
       // 检查页
       this.logger.info(tag, '检查列表获取');
-      let purl = this.getPostListUrl(this.btCnf.torrentPages[0], 1);
-      let pageRes = await this.fetchPage(purl);
+      let cateId = this.btCnf.torrentPages[0];
+      let purl = this.getPostListUrl(cateId, 1);
+      let pageRes = await this.fetchPage(purl, cateId);
       this.logger.info(tag, '最大页数', pageRes.pageMax);
       check.assert.greater(pageRes.pageMax, 3, tag + '页码解析失败');
       check.assert.greater(pageRes.posts.length, 10, tag + '列表解析失败');

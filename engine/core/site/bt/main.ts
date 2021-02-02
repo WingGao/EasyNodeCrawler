@@ -290,8 +290,8 @@ if (require.main === module) {
     await initConfig();
     await BtMainInst.init();
     // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
-    // await Promise.all([BtMainInst.updateSiteAll(), BtMainInst.startVerifyTask()]);
-    await BtMainInst.startVerifyTask();
+    await Promise.all([BtMainInst.updateSiteAll(), BtMainInst.startVerifyTask()]);
+    // await BtMainInst.startVerifyTask();
     return;
   })();
 }

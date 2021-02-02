@@ -1,7 +1,7 @@
 // {**/*,*}.{js,ts,jsx,tsx}
 module.exports = {
   // 行最大长度规则
-  printWidth: 120,
+  printWidth: 200,
   // 使用单引号
   singleQuote: true,
   bracketSpacing: true,

@@ -120,7 +120,7 @@ if (require.main === module) {
             // 领取
             this.site.logger.info('领取', num);
             let linRep = await this.site.axiosInst.get(`/kuang.php?mod=mining&op=lingqu&mineid=1&formhash=${hash}`);
-            this.site.logger.info(linRep.data);
+            // this.site.logger.info(linRep.data);
           }
         }
       }

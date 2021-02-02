@@ -198,16 +198,29 @@ export abstract class SiteCrawler {
         async (posts) => {
           let ok = true;
           let ps = [];
+          let listFirstPostId = null; //当前页第一个post
+          // 这里的post都是从新到旧排列（id从大到小）
           for (let p of posts) {
             if (lastId == null) lastId = p.id; //获取最新的id
             if (!ok) break;
-            if (this.config.pageResultCheck) {
-              //检查是否存在,跳过置顶的检查
-              if (!p._ignoreOld && p._isTop != true && (await this.linkIsOld(p))) {
-                this.logger.info('增量检查到', p.id);
-                ok = false;
+
+            let needCheckOld = false;
+            switch (this.config.pageResultCheck) {
+              case 1:
+                needCheckOld = !p._ignoreOld && p._isTop != true;
                 break;
-              }
+              case 2: //没有新的，才停止
+                if (listFirstPostId == null && p._isTop != true) {
+                  listFirstPostId = p.id;
+                  needCheckOld = true;
+                }
+                break;
+            }
+            //检查是否存在,跳过置顶的检查
+            if (needCheckOld && (await this.linkIsOld(p))) {
+              this.logger.info('增量检查到', p.id);
+              ok = false;
+              break;
             }
             //添加到队列
             ps.push(this.queueAddPost(p));

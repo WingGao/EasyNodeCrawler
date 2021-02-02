@@ -32,7 +32,12 @@ export class SiteConfig {
   toZh?: boolean = false; //转为简体
   saveBody?: 0 | 1 | 2 | 3 = 0; //保存body内容,0=不保存,1=保存源文本,2=保存压缩brotli
   pageResultSave?: boolean = false; //是否直接保存pagelist页面的结果（只保存标题，不注重内容）
-  pageResultCheck: boolean = true; //是否检查增量
+  /**
+   * 是否检查增量
+   * 1=判断当前页如果有旧的，就停止
+   * 2=如果没有新的（全是旧的），就停止
+   */
+  pageResultCheck: 0 | 1 | 2 = 1;
   enableSave?: boolean = true; //是否开启保存
   myUsername?: string; //我的用户名，区分用户
   myUserId?: string;
