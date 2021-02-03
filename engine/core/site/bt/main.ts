@@ -280,6 +280,26 @@ export class BtMain {
       }, 1);
     }
   }
+
+  // 重新标记种子为正常
+  async undeleteTorrent() {
+    let bt = new BtTorrent();
+    let rep = await ESClient.inst().updateByQuery({
+      index: BtTorrent.indexName,
+      body: {
+        query: {
+          bool: {
+            must: [{ term: { site: 'pthome' } }, { range: { tid: { gte: 90170 } } }, { exists: { field: 'deleteAt' } }],
+          },
+        },
+        script: {
+          lang: 'painless',
+          source: 'ctx._source.remove("deleteAt")',
+        },
+      },
+    });
+    this.logger.info(rep);
+  }
 }
 
 let BtMainInst = new BtMain();
@@ -292,6 +312,7 @@ if (require.main === module) {
     // let r = await BtMainInst.findSimilarTorrent({ btPath: 'D:\\tmp\\ec667120e2636400.torrent' });
     await Promise.all([BtMainInst.updateSiteAll(), BtMainInst.startVerifyTask()]);
     // await BtMainInst.startVerifyTask();
+    // await BtMainInst.undeleteTorrent();
     return;
   })();
 }
