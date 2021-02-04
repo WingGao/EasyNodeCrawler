@@ -1,5 +1,6 @@
 import { BtCrawler } from '../index';
 import { BtTorrent } from '../model';
+import { AxiosInstance, AxiosResponse } from 'axios';
 
 export class BtSiteBaseConfig {
   key: string;
@@ -15,15 +16,11 @@ export class BtSiteBaseConfig {
   doCheckin?: (bt: BtCrawler) => Promise<boolean> = null;
   checkCookie?: (bt: BtCrawler) => Promise<boolean> = null; //自定义验证cookie
   pageResultCheck?: number;
-  parsePage?: (
-    bt: BtCrawler,
-    $: CheerioStatic,
-    cateId?,
-    html?: string,
-  ) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> = null;
+  parsePage?: (bt: BtCrawler, $: CheerioStatic, cateId?, html?: string) => Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> = null;
   parsePageNum?: (bt: BtCrawler, $: CheerioStatic) => number = null; //自定义页数解析，自然数
   parsePageTr?: (bt: BtCrawler, $: CheerioStatic, $tr: Cheerio, torrent: BtTorrent) => void = null;
   pageStart0: boolean = false;
+  downloadBtFileBuilder?: (bt: BtCrawler, tid: number) => Promise<AxiosResponse>;
   hotRate: number[] = [40, 60]; //0=30分钟 1=1小时
   watchRules = {}; //特殊的种子需要提醒
   fetchFileMode = BtSiteBaseConfig.FETCH_MODE_DOWNLOAD;

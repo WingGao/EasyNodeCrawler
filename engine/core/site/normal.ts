@@ -151,11 +151,7 @@ export abstract class SiteCrawler {
 
   abstract checkPermission($): boolean;
 
-  async fetchPage(
-    pageUrl,
-    cateId?,
-    cnf?: { axConfig?: any },
-  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
+  async fetchPage(pageUrl, cateId?, cnf?: { axConfig?: any }): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
     this.logger.info('获取', pageUrl);
     let rep = await this.autoFetchPage(pageUrl, cnf ? cnf.axConfig : undefined);
     let $ = cheerio.load(rep.data);
@@ -172,11 +168,7 @@ export abstract class SiteCrawler {
     return res;
   }
 
-  abstract parsePage(
-    $: CheerioStatic,
-    cateId?,
-    html?: string,
-  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
+  abstract parsePage($: CheerioStatic, cateId?, html?: string): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }>;
 
   /**
    * 开始获取正文所在链接操作，一般爬虫是获取一个目录，根据分页爬取
@@ -606,9 +598,7 @@ export abstract class SiteCrawler {
           let purl = this.getPostListUrl(cateId, page, cnf.pageUrlExt);
           if (page > 1) {
             if (cnf.cachePrefix != null && cnf.cacheSecond != 0) {
-              visitKey =
-                `${MainConfig.default().dataPrefix}:${this.config.key}:visited:${cnf.cachePrefix}:` +
-                `${cateId}:page-${page}`;
+              visitKey = `${MainConfig.default().dataPrefix}:${this.config.key}:visited:${cnf.cachePrefix}:` + `${cateId}:page-${page}`;
               //判断是否遍历过
               let visited = await Redis.inst().get(visitKey);
               if (visited != null) {
@@ -735,11 +725,7 @@ export class NormalCrawler extends SiteCrawler {
     return '';
   }
 
-  parsePage(
-    $: CheerioStatic,
-    cateId?,
-    html?: string,
-  ): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
+  parsePage($: CheerioStatic, cateId?, html?: string): Promise<{ posts: Array<Post>; $: CheerioStatic; pageMax: number }> {
     return Promise.resolve({ $: undefined, pageMax: 0, posts: undefined });
   }
 

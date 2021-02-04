@@ -475,10 +475,16 @@ ${v.title} [${v.title2}][${v._fsizeH}]<a href="${this.getPostUrl(v.tid)}" target
   }
 
   async downloadBtFile(tid: number, delay = 0) {
-    let furl = this.config.fullUrl(`/download.php?id=${tid}&passkey=${this.passkey}&https=1`);
-    let dFile = await this.download(furl, { desFile: `${this.btCnf.key}-${tid}.torrent` }).catch(async (e) => {
+    let downloadP;
+    if (this.btCnf.downloadBtFileBuilder != null) {
+      downloadP = this.btCnf.downloadBtFileBuilder(this, tid);
+    } else {
+      let furl = this.config.fullUrl(`/download.php?id=${tid}&passkey=${this.passkey}&https=1`);
+      downloadP = this.download(furl, { desFile: `${this.btCnf.key}-${tid}.torrent` });
+    }
+    let dFile = await downloadP.catch(async (e) => {
       if (e.response && e.response.status == 404) {
-        this.logger.error('未找到', furl);
+        this.logger.error('未找到', e.request.url);
         //删除种子信息
         let bt = new BtTorrent();
         bt.site = this.btCnf.key;
