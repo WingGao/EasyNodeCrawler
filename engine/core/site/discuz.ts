@@ -11,6 +11,8 @@ import { randomCnIP } from '../utils/net';
 import CheckinHandler from '../model/CheckinHandler';
 import { AxiosInstance } from 'axios';
 import any = jasmine.any;
+import parser = require('fast-xml-parser');
+
 export class SiteCrawlerDiscuz extends SiteCrawler {
   // Discuz! X3.4
   async checkCookie() {
@@ -279,10 +281,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let formData = await this.getFormData($form);
     formData['message'] = `[color=#000001]${text}[/color]`;
     let pd = urlencode.stringify(formData, { charset: this.config.charset });
-    let res = await this.axiosInst.post(
-      this.config.fullUrl(`/forum.php?mod=post&action=reply&tid=${post.id}&extra=&replysubmit=yes`),
-      pd,
-    );
+    let res = await this.axiosInst.post(this.config.fullUrl(`/forum.php?mod=post&action=reply&tid=${post.id}&extra=&replysubmit=yes`), pd);
     $ = cheerio.load(res.data);
     return this.checkPermission($);
   }
@@ -300,6 +299,10 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
     let fromIP = randomCnIP();
   }
 
+  parseAjaxXml(xml: string) {
+    let p = parser.parse(xml);
+    return p.root;
+  }
   //参与投票
   async replyVote(post: Post) {
     this.logger.info('投票', this.getPostUrl(post.id));
@@ -349,10 +352,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
       formData['typeid'] = $typeid.find('option').eq(1).val();
     }
     if (ext && ext.typeid) formData['typeid'] = ext.typeid;
-    let res = await this.axiosInst.post(
-      this.config.fullUrl($form.attr('action')),
-      urlencode.stringify(formData, { charset: this.config.charset }),
-    );
+    let res = await this.axiosInst.post(this.config.fullUrl($form.attr('action')), urlencode.stringify(formData, { charset: this.config.charset }));
     let $res = cheerio.load(res.data);
     let $alt = $res('#messagetext');
     let msg = $alt.text();

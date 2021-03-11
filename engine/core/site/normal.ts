@@ -395,6 +395,7 @@ export abstract class SiteCrawler {
     });
     return data;
   }
+
   //自动判断获取页面的方式
   async autoFetchPage(url, cnf?) {
     if (this.config.selenium) {
@@ -664,7 +665,7 @@ export abstract class SiteCrawler {
   async download(furl: string, cnf: { desFile?: string; desDir?: string; createDir?: boolean } = {}) {
     let { desFile } = cnf;
     if (desFile == null) {
-      desFile = _.last(furl.split('/'));
+      desFile = furl.replace(/[:/?]/gi, '_');
     }
     if (!path.isAbsolute(desFile)) {
       desFile = path.resolve(_.defaultTo(cnf.desDir, this.config.tempPath), desFile);
@@ -680,6 +681,7 @@ export abstract class SiteCrawler {
         fs.mkdirSync(dir, { recursive: true });
       }
     }
+    this.logger.info(`download ${furl} to ${desFile} 开始`);
     let rep = await this.axiosInst.get(furl, {
       responseType: 'stream',
       transformResponse: (d) => d,
@@ -696,7 +698,7 @@ export abstract class SiteCrawler {
     );
     fs.renameSync(tmpFile, desFile);
 
-    this.logger.info(`download ${furl} ${desFile} 完成`);
+    this.logger.info(`download ${furl} to ${desFile} 完成`);
     return desFile;
   }
 }

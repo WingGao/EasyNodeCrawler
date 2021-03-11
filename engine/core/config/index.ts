@@ -54,7 +54,7 @@ export class SiteConfig {
   constructor(key: string, props?: Partial<SiteConfig>) {
     this.key = key;
     _.merge(this, props);
-    this.tempPath = path.resolve(MainConfig.default().tempDir, key);
+    if (this.tempPath == null) this.tempPath = path.resolve(MainConfig.default().tempDir, key);
   }
 
   fullUrl(p) {
