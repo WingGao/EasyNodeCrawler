@@ -1,6 +1,7 @@
 import genericPool = require('generic-pool');
 import _ = require('lodash');
 import { sleep } from './time';
+
 /**
  * 任务队列
  * 该队列已线性方式运行
@@ -16,7 +17,7 @@ export class QueueTask {
       v.promise = {
         catch: () => true,
       };
-      this.queue.enqueue(v);
+      this.queue.enqueue(v, v.priority);
     });
   }
 
@@ -31,12 +32,17 @@ export class QueueTask {
         }
       }
       if (this.destroyed) return;
-      await task.action();
+      await task.action(this);
     }
+  }
+
+  async destroy() {
+    this.destroyed = true;
   }
 }
 
 class QueueTaskStep {
+  priority?: number; //越低越先
   eta?: number; //到期才运行
-  action: () => Promise<boolean>; //运行内容
+  action: (q: QueueTask) => Promise<boolean>; //运行内容
 }

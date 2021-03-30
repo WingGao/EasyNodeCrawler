@@ -26,7 +26,7 @@ const LeagueHD = _.merge(new BtSiteBaseConfig(), {
   //     return 0
   // },
   parsePage(bt: BtCrawler, $: CheerioStatic, cateId?, html?: string): Promise<{ posts: Array<any>; $: CheerioStatic; pageMax: number }> {
-    if (cateId != '/torrents_movie.php') {
+    if (['/torrents_movie.php', '/torrents_tv.php', '/torrents_mv.php', '/torrents_doc.php', '/torrents_other.php'].indexOf(cateId) < 0) {
       return bt.parsePageNormal($, cateId, html);
     }
     return this.parsePageCombine(bt, $, cateId);

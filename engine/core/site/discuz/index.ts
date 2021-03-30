@@ -1,14 +1,14 @@
-import { IPostParseConfig, SiteCrawler } from './normal';
+import { IPostParseConfig, SiteCrawler } from '../normal';
 import * as iconv from 'iconv-lite';
 import cheerio = require('cheerio');
 import _ = require('lodash');
-import { Post } from '../post';
-import { getInt, runSafe, sleep, toZhSimple } from '../utils';
+import { Post } from '../../post';
+import { getInt, runSafe, sleep, toZhSimple } from '../../utils';
 import FormData = require('form-data');
 import qs = require('qs');
 import urlencode = require('urlencode');
-import { randomCnIP } from '../utils/net';
-import CheckinHandler from '../model/CheckinHandler';
+import { randomCnIP } from '../../utils/net';
+import CheckinHandler from '../../model/CheckinHandler';
 import { AxiosInstance } from 'axios';
 import any = jasmine.any;
 import parser = require('fast-xml-parser');
@@ -83,7 +83,7 @@ export class SiteCrawlerDiscuz extends SiteCrawler {
         post.viewNum = parseInt($tbody.find('.num>em').text());
         post.replyNum = parseInt($tbody.find('.num>a').text());
         let $th = $tbody.find('th');
-        post.canReply = $th.attr('class').indexOf('lock') < 0;
+        post.canReply = $tbody.find('.lock').length == 0;
         post.title = $th
           .find('a')
           .filter((i, v) => v.attribs && v.attribs.href.indexOf(post.id) > 0)

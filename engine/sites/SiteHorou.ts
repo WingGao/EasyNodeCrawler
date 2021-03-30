@@ -15,6 +15,8 @@ import cheerio = require('cheerio');
 import { getInt, sleep } from '../core/utils';
 import qs = require('qs');
 import { QueueTask } from '../core/utils/queueTask';
+import moment = require('moment');
+import { PluginLuckypost } from '../core/site/discuz/plugin-luckypost';
 
 export default function getConfig() {
   let sc = new SiteConfig('www.horou.com');
@@ -65,6 +67,17 @@ class PluginJfarm {
   formHash: string;
   lands: LandInfo[];
   store = [];
+  /**
+   * 默认种子
+   * 1=小麦
+   */
+  defaultSeedId = 1;
+
+  health = 0; //体力
+  healthMax = 0;
+  nextHealthEta: Date;
+
+  static TYPE_PROD = 'prod';
 
   constructor(site) {
     this.site = site;
@@ -76,7 +89,16 @@ class PluginJfarm {
 
     let $ = cheerio.load(rep.data);
     await this.refreshLands({ html: rep.data });
-    this.site.logger.info(`[PluginJfarm] formHash=${this.formHash} 土地数量=${this.lands.length}`);
+    let $userDivs = $('#userinfo').find('>div');
+    let $heathDiv = $userDivs.eq(2);
+    let healthTxt = $heathDiv.text().trim().split('/');
+    this.health = parseInt(healthTxt[0]);
+    this.healthMax = parseInt(healthTxt[1]);
+    let $healTime = $heathDiv.find('i').eq(1);
+    let healTimeT = $healTime.attr('onclick');
+    let g = /([\d:]+)\)/.exec(healTimeT);
+    // this.nextHealthEta =
+    this.site.logger.info(`[PluginJfarm] formHash=${this.formHash} 土地数量=${this.lands.length} 体力=${this.health}/${this.healthMax}`);
   }
 
   async refreshLands({ html }) {
@@ -96,23 +118,28 @@ class PluginJfarm {
     });
   }
 
-  async fetchApi(conf: { do?: string; ac?: string; landId?: any; ex?: any }) {
+  async fetchApi(conf: { do?: string; ac?: string; landId?: any; ex?: any; ajax?: boolean }) {
     let pa = {
       do: _.defaultTo(conf.do, 'normal'),
       ac: conf.ac,
       jfid: conf.landId,
       timestamp: Math.floor(new Date().getTime() / 1000),
       jhash: this.formHash,
-      inajax: 1,
-      ajaxtarget: 'try',
+
       ...conf.ex,
     };
+    if (conf.ajax != false) {
+      pa.inajax = 1;
+      pa.ajaxtarget = 'try';
+    }
     let q = qs.stringify(pa);
     let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&${q}`);
+
     let html = this.site.parseAjaxXml(rep.data);
     let $ = cheerio.load(html);
     return $;
   }
+
   // 仓库信息
   async fetchStore() {
     let $ = await this.fetchApi({ ac: 'store' });
@@ -137,22 +164,49 @@ class PluginJfarm {
       });
     this.site.logger.info(`[PluginJfarm] 更新仓库 ${JSON.stringify(this.store)}`);
   }
+
+  async doBuySeed(num = 1, seedId?) {
+    let bsi = _.defaultTo(seedId, this.defaultSeedId); //购买种子id
+    let p = {
+      do: 'shop',
+      timestamp: Math.ceil(new Date().getTime() / 1000),
+      formhash: this.formHash,
+      submit: 'true',
+    };
+    p[`jsid[${bsi}]`] = 1;
+    p[`qty[${bsi}]`] = num;
+    let q = qs.stringify(p);
+    let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&${q}`);
+    this.site.logger.info(JSON.parse(rep.data).final);
+    await this.fetchStore();
+  }
+
+  getSeed() {
+    return _.find(this.store, (v) => v.type == 'seed' && v.num > 0);
+  }
+
   // 播种
   async doLandSeed(landId) {
-    let seed = _.find(this.store, (v) => v.type == 'seed' && v.num > 0);
+    if (this.health <= 0) {
+      throw new Error('没有体力了');
+    }
+    let seed = this.getSeed();
     if (seed == null) {
       throw new Error('没有种子了');
     }
     seed.num--;
     this.site.logger.info(`[PluginJfarm] [土地${landId}] 将播种 ${seed.name}`);
     let $ = await this.fetchApi({ do: 'plantseed', landId, ex: { seed: seed.id } });
+    this.health--;
   }
+
   //收获
   async doLandHarvest(landId) {
     let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&do=harvest&jfid=${landId}&formhash=${this.formHash}`);
     let land = _.find(this.lands, (v) => v.id == landId);
     this.site.logger.info(`[PluginJfarm] [土地${landId}] 收获成功 ${land == null ? '' : `数量 ${land.num}`}`);
   }
+
   // 获取成长信息
   async fetchLandFarm(landId) {
     let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&do=normal&ac=thisfarm&jfid=${landId}&fhash=${this.formHash}&inajax=1&ajaxtarget=try`);
@@ -169,9 +223,36 @@ class PluginJfarm {
         let dateT = txt.substring(0, txt.length - 2);
         info.endTime = new Date(dateT);
       } else if (txt == '收获') {
+        info.endTime = new Date();
       }
     });
     return info;
+  }
+  // 卖出作物
+  async doSell() {
+    await this.fetchStore();
+    // /plugin.php?id=jnfarm&do=store&submit=true&timestamp=1616389991&formhash=c6876729&storesubmit=yes&prod%5B1%5D=1&prodqty%5B1%5D=1
+    let ex = {
+      do: 'store',
+      timestamp: Math.ceil(new Date().getTime() / 1000),
+      formhash: this.formHash,
+      submit: 'true',
+      storesubmit: 'yes',
+    };
+    let hasProd = false;
+    _.forEach(this.store, (v, i) => {
+      if (v.type == PluginJfarm.TYPE_PROD) {
+        ex[`prod[${i + 1}]`] = v.id;
+        ex[`prodqty[${i + 1}]`] = v.num;
+        this.site.logger.info(`将卖出 ${v.name}=${v.num}`);
+        hasProd = true;
+      }
+    });
+    if (!hasProd) return; //没有作物就跳过
+    let q = qs.stringify(ex);
+    let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&${q}`);
+    this.site.logger.info(rep.data);
+    await this.fetchStore();
   }
   // 任务步骤
   taskSteps = [];
@@ -182,13 +263,21 @@ class PluginJfarm {
     await this.fetchIndex();
     await this.fetchStore();
     this.taskSteps = [];
+    let doSeed = async (landId) => {
+      if (this.getSeed() == null) {
+        //没有种子，则进行购买
+        await this.doSell();
+        await this.doBuySeed();
+      }
+      await this.doLandSeed(landId);
+    };
     let ps = this.lands.map(async (land) => {
       if (land.kind == LandInfo.EMPTY) {
         //播种
         // this.site.logger.info(`[PluginJfarm] [土地${land.id}] 需要播种`);
         //TODO 多任务时，直接添加到task，
         this.taskSteps.push({
-          action: () => this.doLandSeed(land.id),
+          action: () => doSeed(land.id),
         });
       } else if (land.kind == LandInfo.FARMING) {
         if (land.num == null) {
@@ -204,7 +293,7 @@ class PluginJfarm {
             await this.doLandHarvest(land.id);
             await sleep(3000);
             //再播种
-            await this.doLandSeed(land.id);
+            await doSeed(land.id);
           },
         });
       }
@@ -213,27 +302,31 @@ class PluginJfarm {
     // 等待task.
     await this.doSteps(this.taskSteps);
   }
+
   async doSteps(steps) {
     let qt = new QueueTask(steps);
     await qt.start();
   }
 
   async test() {
-    while (true) {
-      await this.autoTask();
-      await sleep(5000);
-    }
-    // await this.fetchIndex();
+    await this.fetchIndex();
     // await this.fetchStore();
     // await this.fetchLandFarm(this.lands[0].id);
     // await this.doLandHarvest(this.lands[0].id);
     // await this.doLandSeed(this.lands[0].id);
+    // await this.doSell();
+    // return;
+    while (true) {
+      await this.autoTask();
+      await sleep(5000);
+    }
   }
 }
 
 if (require.main === module) {
   let cnf;
   let jfarm: PluginJfarm;
+  let luckyPost: PluginLuckypost;
 
   class A extends BaseAction {
     async init(): Promise<any> {
@@ -243,6 +336,19 @@ if (require.main === module) {
       this.site = new SiteCrawlerDiscuz(cnf);
       this.spam = new SpamNormal(cnf, this.site);
       jfarm = new PluginJfarm(this.site);
+      luckyPost = new PluginLuckypost(this.site as any);
+      this.otherActions = [
+        { name: '农场', value: 'jfarm' },
+        { name: '发帖际遇', value: 'luckypost' },
+      ];
+    }
+
+    async onOtherAction(act: string) {
+      if (act == 'jfarm') {
+        return await jfarm.test();
+      } else if (act == 'luckypost') {
+        return await luckyPost.showInfo();
+      }
     }
 
     async shui() {
@@ -255,6 +361,8 @@ if (require.main === module) {
             await this.site.checkin();
             await this.task(27); //潜水
             await this.task(26); //回20贴
+            // 宝箱签到
+            await this.site.axiosInst.get('/plugin.php?id=zgxsh_chest:index_if&op=sign&infloat=yes&handlekey=TC&inajax=1&ajaxtarget=fwin_content_TC');
             return true;
           }),
         //检查任务
@@ -272,7 +380,9 @@ if (require.main === module) {
         () =>
           this.spam.doWithLimit('reply', () =>
             this.spam.shuiCagegory('9', {
-              checkPost: (p: Post) => p.replyNum > cnf.replyPageSize * 2,
+              checkPost: (p: Post) => {
+                return p.replyNum > cnf.replyPageSize * 2 && moment(p.createTime).add(7, 'd').isAfter(); //7天内的主题
+              },
               onReply: async (p: Post) => {
                 let re = await this.spam.gerRandomReply(p, 2);
                 return re == null ? null : re.body;
@@ -320,10 +430,8 @@ if (require.main === module) {
   }
 
   let siteA = new A();
-  (async () => {
-    await siteA.prepare();
-    await jfarm.test();
-  })();
-
-  // siteA.start();
+  // siteA.start('jfarm');
+  // siteA.start('shui');
+  // siteA.start('luckypost');
+  siteA.start();
 }

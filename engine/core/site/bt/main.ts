@@ -175,7 +175,7 @@ export class BtMain {
   async updateSiteAll() {
     // 已经全量更新完的站点
     let updateSites = [
-      'btschool',
+      // 'btschool',
       'haidan',
       'leaguehd',
       'nicept',

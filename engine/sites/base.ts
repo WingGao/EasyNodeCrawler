@@ -9,12 +9,13 @@ import _ = require('lodash');
 import { SiteConfig } from '../core/config';
 import Choice = require('inquirer/lib/objects/choice');
 import { runSafe } from '../core/utils';
+import { DistinctChoice } from 'inquirer';
 
 abstract class BaseAction {
   cnf: SiteConfig;
   site: SiteCrawler;
   spam: SpamNormal;
-  otherAction: Array<Choice> = [];
+  otherActions: Array<DistinctChoice<any>> = [];
   abstract init(): Promise<any>;
   async prepare() {
     await initConfig();
@@ -23,23 +24,26 @@ abstract class BaseAction {
   }
   async shui() {}
   async onOtherAction(act: string) {}
-  async start() {
+  async start(act?: string) {
     await this.prepare();
-    let ua = { action: null };
-    if (_.size(yargs.argv._) == 0) {
+    let ua = { action: act };
+    let choices = [
+      { name: '获取链接', value: 'link' },
+      { name: '获取详情', value: 'post' },
+      { name: '灌水', value: 'shui' },
+    ].concat(this.otherActions);
+
+    if (_.size(yargs.argv._) > 0) {
+      ua.action = yargs.argv._[0];
+    }
+    if (ua.action == null) {
       ua = await inquirer.prompt({
         name: 'action',
         type: 'rawlist',
         message: '选择操作',
-        choices: [
-          { name: '获取链接', value: 'link' },
-          { name: '获取详情', value: 'post' },
-          { name: '灌水', value: 'shui' },
-        ].concat(this.otherAction),
+        choices,
         default: 2,
       });
-    } else {
-      ua.action = yargs.argv._[0];
     }
 
     switch (ua.action) {

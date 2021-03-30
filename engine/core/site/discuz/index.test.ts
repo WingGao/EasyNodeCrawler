@@ -1,13 +1,12 @@
-import { SiteCrawlerDiscuz } from './discuz';
-import SiteSeikuu from '../../sites/SiteSeikuu';
-import { initConfig } from '../index';
+import { SiteCrawlerDiscuz } from './index';
+import { initConfig } from '../../index';
 import path = require('path');
 import brotli = require('brotli');
-import { MainConfig, SiteConfig } from '../config';
-import { Post } from '../post';
-import SiteHorou from '../../sites/SiteHorou';
-import SiteAbooky from '../../sites/SiteAbooky';
-import SiteShuyue from '../../sites/SiteShuyue';
+import { MainConfig, SiteConfig } from '../../config';
+import { Post } from '../../post';
+import SiteHorou from '../../../sites/SiteHorou';
+import SiteAbooky from '../../../sites/SiteAbooky';
+import SiteShuyue from '../../../sites/SiteShuyue';
 
 let testConfig: SiteConfig;
 let site: SiteCrawlerDiscuz;
