@@ -6,7 +6,8 @@ import { waitUntilLoad } from '../../../utils';
 
 const MTeamConfig = _.merge(new BtSiteBaseConfig(), {
   key: 'mteam',
-  host: 'pt.m-team.cc',
+  // host: 'pt.m-team.cc',
+  host: 'kp.m-team.cc',
   torrentPages: ['/torrents.php', '/music.php', '/adult.php'],
   myUserId: '217881',
   checkCookie: async (bt: BtCrawler) => {

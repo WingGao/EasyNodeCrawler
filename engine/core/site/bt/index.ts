@@ -92,24 +92,30 @@ export class BtCrawler extends SiteCrawler {
       pageMax = this.btCnf.parsePageNum(this, $);
     } else {
       let $pages = $('.torrents').siblings('p').find('a');
-      $pages.each((i, v) => {
-        let pageu = v.attribs.href;
-        if (_.size(pageu) == 0) return;
-        pageu = pageu.split('?')[1];
-        let para = qs.parse(pageu) as any;
-        if (para.page == null) return;
-        let page;
-        if (!_.isString(para.page)) page = parseInt(_.last(para.page));
-        else page = parseInt(para.page);
-        // let g = /page=(\d+)/.exec(v.attribs.href);
-        // if (g == null) return;
-        // let page = parseInt(g[1]);
-        if (!isNaN(page)) {
-          pageMax = Math.max(pageMax, page);
-        }
-      });
-      pageMax++;
+      pageMax = this.parsePageNumDivs($pages);
     }
+    return pageMax;
+  }
+  // 处理分页的链接 a
+  parsePageNumDivs($pageAList) {
+    let pageMax = 0;
+    $pageAList.each((i, v) => {
+      let pageu = v.attribs.href;
+      if (_.size(pageu) == 0) return;
+      pageu = pageu.split('?')[1];
+      let para = qs.parse(pageu) as any;
+      if (para.page == null) return;
+      let page;
+      if (!_.isString(para.page)) page = parseInt(_.last(para.page));
+      else page = parseInt(para.page);
+      // let g = /page=(\d+)/.exec(v.attribs.href);
+      // if (g == null) return;
+      // let page = parseInt(g[1]);
+      if (!isNaN(page)) {
+        pageMax = Math.max(pageMax, page);
+      }
+    });
+    pageMax++;
     return pageMax;
   }
   // 通用解析pagelist
@@ -757,16 +763,20 @@ async function main() {
   let site = new BtCrawler(sc);
   await site.init();
   let cates = sc.torrentPages.map((v) => ({ id: v, name: v }));
+  let { doCates } = argv;
+  let doChoices = [{ name: 'all', value: cates }, ...cates.map((v) => ({ name: v.id, value: [v] }))];
+  if (doCates) {
+    doCates = _.find(doChoices, (v) => v.name == doCates).value;
+  } else {
+  }
   switch (ua.act) {
     case 'list':
-      await site.startFindLinks(cates, { cacheSecond: 3 * 3600, poolSize: 3 });
+      if (!doCates) doCates = cates;
+      await site.startFindLinks(doCates as any, { cacheSecond: 3 * 3600, poolSize: 3 });
       break;
     case 'file': //直接下载
     case 'file2': //添加任务分布式下载
-      let { doCates } = argv;
-      let doChoices = [{ name: 'all', value: cates }, ...cates.map((v) => ({ name: v.id, value: [v] }))];
       if (doCates) {
-        doCates = _.find(doChoices, (v) => v.name == doCates).value;
       } else {
         let r = await inquirer.prompt({
           name: 'doCates',

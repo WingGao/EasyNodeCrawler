@@ -38,6 +38,7 @@ export class QueueTask {
 
   async destroy() {
     this.destroyed = true;
+    this.queue._slots = [];
   }
 }
 

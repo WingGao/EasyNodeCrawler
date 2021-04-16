@@ -17,6 +17,9 @@ import qs = require('qs');
 import { QueueTask } from '../core/utils/queueTask';
 import moment = require('moment');
 import { PluginLuckypost } from '../core/site/discuz/plugin-luckypost';
+import axios from 'axios';
+
+const ReplyLimitNum = 20;
 
 export default function getConfig() {
   let sc = new SiteConfig('www.horou.com');
@@ -31,7 +34,7 @@ export default function getConfig() {
   sc.myUsername = 'shaziniu1';
   sc.myUserId = '334371';
   sc.myReplyMaxPerPage = 8;
-  sc.limit.reply = 98;
+  sc.limit.reply = ReplyLimitNum; // 98;
   sc.checkinUrl = '/plugin.php?id=k_misign:sign';
   sc.cookie = cookies[sc.host].cookie;
   sc.beforeReq = (options, done) => {
@@ -70,12 +73,16 @@ class PluginJfarm {
   /**
    * 默认种子
    * 1=小麦
+   * 2=胡萝卜
+   * 5=玉米
+   * 6=土豆 收获经验4
    */
-  defaultSeedId = 1;
+  defaultSeedId = 6;
 
   health = 0; //体力
   healthMax = 0;
   nextHealthEta: Date;
+  exp = 0; //经验
 
   static TYPE_PROD = 'prod';
 
@@ -90,6 +97,8 @@ class PluginJfarm {
     let $ = cheerio.load(rep.data);
     await this.refreshLands({ html: rep.data });
     let $userDivs = $('#userinfo').find('>div');
+    let exp = $userDivs.eq(1).find('.layui-progress-bar').attr('lay-percent').split('/')[0];
+    this.exp = parseInt(exp);
     let $heathDiv = $userDivs.eq(2);
     let healthTxt = $heathDiv.text().trim().split('/');
     this.health = parseInt(healthTxt[0]);
@@ -98,7 +107,7 @@ class PluginJfarm {
     let healTimeT = $healTime.attr('onclick');
     let g = /([\d:]+)\)/.exec(healTimeT);
     // this.nextHealthEta =
-    this.site.logger.info(`[PluginJfarm] formHash=${this.formHash} 土地数量=${this.lands.length} 体力=${this.health}/${this.healthMax}`);
+    this.site.logger.info(`[PluginJfarm] formHash=${this.formHash} 土地数量=${this.lands.length} 体力=${this.health}/${this.healthMax} 经验=${this.exp}`);
   }
 
   async refreshLands({ html }) {
@@ -159,6 +168,9 @@ class PluginJfarm {
             type: g[2],
             num: parseInt($div.find('input').eq(1).val()),
           };
+          //奇怪的映射
+          if (item.id == 3 && item.type == 'seed') item.id = 5;
+          if (item.id == 4 && item.type == 'seed') item.id = 6;
           this.store.push(item);
         }
       });
@@ -242,8 +254,8 @@ class PluginJfarm {
     let hasProd = false;
     _.forEach(this.store, (v, i) => {
       if (v.type == PluginJfarm.TYPE_PROD) {
-        ex[`prod[${i + 1}]`] = v.id;
-        ex[`prodqty[${i + 1}]`] = v.num;
+        ex[`prod[${v.id}]`] = 1;
+        ex[`prodqty[${v.id}]`] = v.num;
         this.site.logger.info(`将卖出 ${v.name}=${v.num}`);
         hasProd = true;
       }
@@ -251,7 +263,7 @@ class PluginJfarm {
     if (!hasProd) return; //没有作物就跳过
     let q = qs.stringify(ex);
     let rep = await this.site.axiosInst.get(`/plugin.php?id=jnfarm&${q}`);
-    this.site.logger.info(rep.data);
+    this.site.logger.info(JSON.parse(rep.data).final);
     await this.fetchStore();
   }
   // 任务步骤
@@ -271,29 +283,40 @@ class PluginJfarm {
       }
       await this.doLandSeed(landId);
     };
+    let needRefresh = true;
     let ps = this.lands.map(async (land) => {
       if (land.kind == LandInfo.EMPTY) {
         //播种
         // this.site.logger.info(`[PluginJfarm] [土地${land.id}] 需要播种`);
-        //TODO 多任务时，直接添加到task，
         this.taskSteps.push({
-          action: () => doSeed(land.id),
+          action: () => {
+            return doSeed(land.id);
+          },
+        });
+        // 播种完需要刷新
+        this.taskSteps.push({
+          eta: new Date().getTime() + 5000,
+          action: (qt) => {
+            qt.destroy();
+            return Promise.resolve();
+          },
         });
       } else if (land.kind == LandInfo.FARMING) {
         if (land.num == null) {
           let info = await this.fetchLandFarm(land.id);
           land.num = info.num;
           land.endTime = info.endTime;
-          this.site.logger.info(`[PluginJfarm] [土地${land.id}] 将在${info.endTime}成熟`);
+          this.site.logger.info(`[PluginJfarm] [土地${land.id}] 数量=${land.num} 将在${info.endTime}成熟`);
         }
         this.taskSteps.push({
           eta: land.endTime.getTime() + 3000,
-          action: async () => {
+          action: async (qt) => {
             //收获
             await this.doLandHarvest(land.id);
-            await sleep(3000);
-            //再播种
-            await doSeed(land.id);
+            qt.destroy();
+            // await sleep(3000);
+            // //再播种
+            // await doSeed(land.id);
           },
         });
       }
@@ -309,6 +332,20 @@ class PluginJfarm {
   }
 
   async test() {
+    setInterval(() => {
+      // this.site.logger.info('keep alive');
+      axios
+        .post(
+          // `http://127.0.0.1:9010/api/wgw/alive/do`
+          `https://wgw.suamo.art/api/wgw/alive/do`,
+          {
+            Name: 'ppd-node',
+          },
+        )
+        .catch((e) => {
+          this.site.logger.error(e);
+        });
+    }, 2 * 60000);
     await this.fetchIndex();
     // await this.fetchStore();
     // await this.fetchLandFarm(this.lands[0].id);
@@ -363,10 +400,10 @@ if (require.main === module) {
             await this.task(26); //回20贴
             // 宝箱签到
             await this.site.axiosInst.get('/plugin.php?id=zgxsh_chest:index_if&op=sign&infloat=yes&handlekey=TC&inajax=1&ajaxtarget=fwin_content_TC');
+            //恢复每日限额，目前保证不上榜
+            this.site.config.limit.reply = ReplyLimitNum;
             return true;
           }),
-        //检查任务
-        () => this.task(26, false),
         // 检查圹
         async () => {
           let now = new Date().getTime();
@@ -378,17 +415,34 @@ if (require.main === module) {
         },
         //河洛茶馆
         () =>
-          this.spam.doWithLimit('reply', () =>
-            this.spam.shuiCagegory('9', {
-              checkPost: (p: Post) => {
-                return p.replyNum > cnf.replyPageSize * 2 && moment(p.createTime).add(7, 'd').isAfter(); //7天内的主题
-              },
-              onReply: async (p: Post) => {
-                let re = await this.spam.gerRandomReply(p, 2);
-                return re == null ? null : re.body;
-              },
-              maxPage: 5,
-            }),
+          this.spam.doWithLimit(
+            'reply',
+            () =>
+              //TODO 确保自己不上榜
+              this.spam.shuiCagegory('9', {
+                checkPost: (p: Post) => {
+                  return p.replyNum > cnf.replyPageSize * 2 && moment(p.createTime).add(7, 'd').isAfter(); //7天内的主题
+                },
+                onReply: async (p: Post) => {
+                  let pnMax = Math.ceil(p.replyNum / cnf.replyPageSize) - 2;
+                  let pn = 2;
+                  if (pnMax > pn) pn = _.random(pn, pnMax, false);
+                  let re = await this.spam.gerRandomReply(p, pn); //TODO 重复回复
+                  return re == null ? null : re.body;
+                },
+                maxPage: 5,
+              }),
+            async () => {
+              //TODO 一次标记
+              //检查任务
+              this.task(26, false);
+              let tops = await this.fetchTopPoster();
+              let me = _.find(tops, (v) => v.uid == cnf.myUserId);
+              if (me == null) {
+                this.site.config.limit.reply = _.last(tops).num - 3;
+                this.site.logger.info(`更新reply ${this.site.config.limit.reply}`);
+              }
+            },
           ),
       ]);
     }
@@ -427,6 +481,20 @@ if (require.main === module) {
       }
       // 兑换
     }
+    // 获取每日之星
+    async fetchTopPoster() {
+      let $ = cheerio.load((await this.site.axiosInst.get('/forum.php')).data);
+      let tops = [];
+      $('#dx-ranks-bd li').each((i, dom) => {
+        let $a = $(dom).find('a.xi2');
+        let topa = {
+          uid: _.last($a.attr('id').split('-')),
+          num: getInt($a.text()),
+        };
+        tops.push(topa);
+      });
+      return tops;
+    }
   }
 
   let siteA = new A();
@@ -434,4 +502,7 @@ if (require.main === module) {
   // siteA.start('shui');
   // siteA.start('luckypost');
   siteA.start();
+  // siteA.prepare().then(() => {
+  //   siteA.fetchTopPoster();
+  // });
 }

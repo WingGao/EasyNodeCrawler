@@ -170,10 +170,7 @@ export default class SpamNormal {
     np.url = purl;
     let res = await this.crawler.fetchPost(np, { onlyMain: false });
     // 非楼主回复
-    let replys = _.filter(
-      res._replyList,
-      (v) => v.authorId != post.authorId && v.body.length <= 20 && v.body.length > 4,
-    );
+    let replys = _.filter(res._replyList, (v) => v.authorId != post.authorId && v.body.length <= 20 && v.body.length > 4);
     if (replys.length == 0) return null;
     return replys[_.random(0, replys.length - 1, false)];
   }
@@ -237,7 +234,7 @@ export default class SpamNormal {
     }
   }
 
-  async doWithLimit2(limitKey: string, maxVal: number, action: () => Promise<boolean>) {
+  async doWithLimit2(limitKey: string, maxVal: number, action: () => Promise<boolean>, onMax?: () => Promise<any>) {
     let currentVal = 0;
     let redisKey = `${MainConfig.default().dataPrefix}:${this.config.key}:todayLimit:${limitKey}`;
     let dec = async () => {
@@ -261,6 +258,7 @@ export default class SpamNormal {
       if (currentVal > maxVal) {
         this.crawler.logger.info('doWithLimit 到达上限', limitKey, maxVal);
         await dec();
+        if (onMax != null) await onMax();
         return false;
       } else {
         this.crawler.logger.info(`doWithLimit ${limitKey} ${currentVal}/${maxVal}`);
@@ -279,9 +277,9 @@ export default class SpamNormal {
     }
   }
 
-  async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>) {
+  async doWithLimit(limitKey: keyof LimitConfig, action: () => Promise<boolean>, onMax?: () => Promise<any>) {
     let maxVal = this.config.limit[limitKey];
-    return this.doWithLimit2(limitKey, maxVal, action);
+    return this.doWithLimit2(limitKey, maxVal, action, onMax);
   }
 
   async tt() {

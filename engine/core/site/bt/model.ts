@@ -126,3 +126,13 @@ export interface IFileHashPiece {
   i: number; //起始位置
   hash: string;
 }
+
+export enum BtFieldType {
+  UNKNOWN,
+  TITLE,
+  SIZE,
+  SEEDERS,
+  LEECHERS,
+  COMPLETE,
+  CREATE_TIME,
+}
