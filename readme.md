@@ -18,3 +18,6 @@
 # 下载es https://www.elastic.co/cn/downloads/elasticsearch
 # 下载分词 https://github.com/medcl/elasticsearch-analysis-ik
 ```
+
+### 问题
+*     "opencc": "^1.1.1",
