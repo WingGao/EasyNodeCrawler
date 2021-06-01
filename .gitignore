@@ -3,3 +3,10 @@ datas
 config/cookie-loc.json
 config/local.yaml
 temp/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*

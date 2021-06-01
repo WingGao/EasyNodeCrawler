@@ -4,6 +4,8 @@
     "target": "es5",
     "sourceMap": true,
     "downlevelIteration": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
     "lib": [
       "ES2019",
       "es2020"
