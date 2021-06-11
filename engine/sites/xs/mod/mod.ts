@@ -60,8 +60,8 @@ function extendPageResult() {
 export async function initDB() {
   connection = await createConnection({
     type: "mongodb",
-    // host: "localhost",
-    host: "ubu.vm",
+    host: "localhost",
+    // host: "ubu.vm",
     port: 27017,
     database: "xs",
     entities: [
