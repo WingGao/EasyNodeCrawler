@@ -5,9 +5,12 @@ import crypto = require('crypto');
 import Redis from "../../../core/redis";
 import { MainConfig } from "../../../core/config";
 import { Redis as iRedis } from "ioredis";
-import {load as cLoad} from "cheerio";
+import { load as cLoad } from "cheerio";
+import { checkSrcType, initDB, pageRepo, PageResult, Person, personRepo } from "../mod";
+import _ = require("lodash");
+import XLSX = require('xlsx');
+import { GoogleResultParserCAS } from "./s_cas";
 
-const md5 = crypto.createHash('md5');
 const logger = log4js.getLogger();
 logger.level = 'debug';
 let _driver: DriverFirefoxWing;
@@ -21,36 +24,116 @@ async function getDriver() {
     _driver = await DriverFirefoxWing.build()
 }
 
-async function doGoogle(name: string) {
-    let url = `https://www.google.com/search?q=${encodeURIComponent(name)}`
-    let cacheKey = `node_xs:cache:${md5.update(url).digest('hex')}`
-    let page =await Redis.setIfNull(cacheKey,async ()=>{
-        await _driver.driver.get(`https://www.google.com/search?q=${encodeURIComponent(name)}`)
+// 通过谷歌搜索
+async function doGoogle(person: Person, save = false) {
+    let surl = `https://www.google.com/search?q=${encodeURIComponent(`${person.enName} ${person.org}`)}&num=30`
+    let cacheKey = Redis.buildKeyMd5('node_xs:cache:', surl)
+    logger.info('doGoogle', surl, cacheKey)
+    let page = await Redis.setIfNull(cacheKey, async () => {
+        await _driver.driver.get(surl)
         await _driver.waitBody()
         return await _driver.getDocument()
     })
     let $ = cLoad(page)
     let items = []
-    $('#rso .g').each((i,dom:any)=>{
+    // 判断是否触发验证
+    if ($('#rso .g').length == 0 || $('#captcha-form').length > 0) {
+        await redis.del(cacheKey)
+        //触发识别
+        logger.info('等待验证码')
+        await _driver.driver.wait(async (d) => {
+            let r = await d.executeScript(`return document.getElementById('captcha-form') == null`)
+            return r
+        }, 2 * 60 * 1000)
+        await _driver.waitBody()
+        page = await _driver.getDocument()
+        await redis.set(cacheKey, page)
+        $ = cLoad(page)
+    }
+    $('#rso .g').each((i, dom: any) => {
         let $dom = $(dom)
         let $h3 = $dom.find('h3')
         let $a = $h3.parent()
-        let $desc = $a.parent().next() .find('span')
-        let item = {
-            title:$h3.text(),
-            link: $a.attr('href'),
-            desc:$desc.text(),
-        }
+        let $desc = $a.parent().next().find('span')
+        let item = _.merge(new PageResult(), {
+            title: $h3.text(),
+            url: $a.attr('href'),
+            googleDesc: $desc.text(),
+            googleIdx: i + 1,
+            personId: person.id,
+        })
+        item.srcType = checkSrcType(item.url)
         items.push(item)
     })
-    debugger
+    if (save) {
+        await Promise.all(items.map(async (item) => {
+            return pageRepo.upsertByUrl(item)
+        }))
+    }
+    return items
 }
+
+async function getPerson(op: Person) {
+    let person = await personRepo.findOne({ enName: op.enName, org: op.org })
+    if (person == null) {
+        person = await personRepo.save(op)
+    }
+    return person
+}
+
 
 async function main() {
     //@ts-ignore
     global.aawait = require('deasync-promise')
-    await getDriver();
-    await doGoogle("An Zhiseng" + " Chinese Academy of Sciences")
+    await initDB()
+    // await getDriver();
+    let book = XLSX.readFile("d:\\Weiyun\\手动同步\\wins\\xs\\华人名单-CAS-v2.xlsx");
+    let targetOrg = "Chinese Academy of Sciences"
+    let sheet = book.Sheets[book.SheetNames[0]];
+    let rows = XLSX.utils.sheet_to_json(sheet);
+
+    // let step = 'google' //获取搜索结果
+    let step = 'google-result' //处理搜索结果
+    let googleParsers = {
+        [GoogleResultParserCAS.Type]: new GoogleResultParserCAS()
+    }
+    for (let i = 0; i < rows.length; i++) {
+        let row = rows[i] as any
+        logger.info(`${i + 1}/${rows.length} ${row.Name}`)
+        let person = new Person()
+        person.enName = row.Name.trim()
+        person.org = targetOrg
+        person = await getPerson(person)
+        switch (step) {
+            case 'google':
+                if (person.google == null || person.google < 1) {
+                    let items = await doGoogle(person, true)
+                    if (items.length == 0) throw new Error("empty google")
+                    person.google = 1
+                    await personRepo.save(person)
+                    await _driver.driver.sleep(2000)
+                }
+                break
+            case 'google-result':
+                if (person.google == null || person.google < 1) {
+                    logger.error(Person, '当前google为', person.google)
+                } else if (person.google == 1) {
+                    let items = await pageRepo.find({
+                        where: {
+                            personId: person.id,
+                            html: { $exists: false, $eq: null }
+                        }
+                    })
+                    await Promise.all(_.map(items, (async (item) => {
+                        let parser = googleParsers[item.srcType]
+                        if (parser != null) {
+                            let r = await parser.parseItem(person, item)
+                            if (r._changed) await pageRepo.save(r)
+                        }
+                    })))
+                }
+        }
+    }
 }
 
 main()

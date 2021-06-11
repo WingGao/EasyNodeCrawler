@@ -1,7 +1,6 @@
 import * as IORedis from 'ioredis';
 import { MainConfig } from './config';
 import crypto = require('crypto');
-const md5 = crypto.createHash('md5');
 let redis: IORedis.Redis;
 let artRedis: IORedis.Redis;
 export default class Redis {
@@ -27,6 +26,7 @@ export default class Redis {
     await this.inst().del(key);
   }
   static buildKeyMd5(prefix:string,key:string){
+    const md5 = crypto.createHash('md5');
     return `${prefix}${md5.update(key).digest('hex')}`
   }
   static async setIfNull(key,onSet:()=>Promise<any>){

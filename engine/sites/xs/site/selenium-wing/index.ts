@@ -14,11 +14,13 @@ export class DriverFirefoxWing {
     }
 
     async waitBody() {
+        logger.debug("waitBody start")
+        await this.driver.sleep(500)
         await this.driver.wait(async () => {
             let r = await this.driver.executeScript("return document.readyState")
             return r == "complete"
         }, 30 * 1000)
-        logger.info("waitBody done")
+        logger.debug("waitBody done")
     }
 
     async getDocument() {
