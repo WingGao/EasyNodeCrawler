@@ -1,6 +1,7 @@
 import * as IORedis from 'ioredis';
 import { MainConfig } from './config';
 import crypto = require('crypto');
+import { val } from "cheerio/lib/api/attributes";
 let redis: IORedis.Redis;
 let artRedis: IORedis.Redis;
 export default class Redis {
@@ -33,7 +34,15 @@ export default class Redis {
     let value = await this.inst().get(key)
     if(value == null){
       value = await onSet()
-      await this.inst().set(key, value)
+        let sv = value
+      if(typeof sv != 'string'){
+          sv = JSON.stringify(value)
+      }
+      await this.inst().set(key, sv)
+    }else{
+      if(value.startsWith('{')){
+        value = JSON.parse(value)
+      }
     }
     return value
   }

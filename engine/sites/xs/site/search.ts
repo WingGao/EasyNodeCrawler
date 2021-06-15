@@ -1,7 +1,9 @@
 import { Builder, ThenableWebDriver, WebDriver } from "selenium-webdriver";
 import { DriverFirefoxWing } from "./selenium-wing";
+import path = require('path');
 import log4js = require('log4js');
 import crypto = require('crypto');
+import "reflect-metadata"
 import Redis from "../../../core/redis";
 import { MainConfig } from "../../../core/config";
 import { Redis as iRedis } from "ioredis";
@@ -10,6 +12,7 @@ import { checkSrcType, initDB, pageRepo, PageResult, Person, personRepo } from "
 import _ = require("lodash");
 import XLSX = require('xlsx');
 import { GoogleResultParserCAS } from "./s_cas";
+import GctAminer from "./s_gctaminercn";
 
 const logger = log4js.getLogger();
 logger.level = 'debug';
@@ -29,9 +32,12 @@ async function doGoogle(person: Person, save = false) {
     let surl = `https://www.google.com/search?q=${encodeURIComponent(`${person.enName} ${person.org}`)}&num=30`
     let cacheKey = Redis.buildKeyMd5('node_xs:cache:', surl)
     logger.info('doGoogle', surl, cacheKey)
+    let useCache = true
     let page = await Redis.setIfNull(cacheKey, async () => {
+        useCache = false;
         await _driver.driver.get(surl)
         await _driver.waitBody()
+        //TODO 精简html
         return await _driver.getDocument()
     })
     let $ = cLoad(page)
@@ -70,7 +76,7 @@ async function doGoogle(person: Person, save = false) {
             return pageRepo.upsertByUrl(item)
         }))
     }
-    return items
+    return { items, useCache }
 }
 
 async function getPerson(op: Person) {
@@ -81,21 +87,45 @@ async function getPerson(op: Person) {
     return person
 }
 
+function saveRows(rows, headers, outPath) {
+    rows.splice(0, 0, headers);
+    let book = XLSX.utils.book_new();
+    let sheet = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(book, sheet);
+    XLSX.writeFile(book, outPath);
+}
+
 
 async function main() {
     //@ts-ignore
     global.aawait = require('deasync-promise')
     await initDB()
-    // await getDriver();
+    await getDriver();
     let book = XLSX.readFile("d:\\Weiyun\\手动同步\\wins\\xs\\华人名单-CAS-v2.xlsx");
     let targetOrg = "Chinese Academy of Sciences"
     let sheet = book.Sheets[book.SheetNames[0]];
     let rows = XLSX.utils.sheet_to_json(sheet);
-
+    let exportRows = []
     // let step = 'google' //获取搜索结果
-    let step = 'google-result' //处理搜索结果
+    // let step = 'google-result' //处理搜索结果
+    // let step = 'reset-html'
+    // let step = 'gct'
+    let step = 'export-name' //导出名字
     let googleParsers = {
         [GoogleResultParserCAS.Type]: new GoogleResultParserCAS()
+    }
+    let endFun
+    let stepFun: (row, person: Person) => Promise<void>
+    switch (step) {
+        case 'export-name': {
+            stepFun = async (row, person: Person) => {
+                exportRows.push([person.id.toHexString(), person.cnName])
+            }
+            endFun = async () => {
+                saveRows(exportRows, ['id', 'cnName'], path.resolve(__dirname, '../temp/tmp.xlsx'))
+            }
+            break
+        }
     }
     for (let i = 0; i < rows.length; i++) {
         let row = rows[i] as any
@@ -105,35 +135,65 @@ async function main() {
         person.org = targetOrg
         person = await getPerson(person)
         switch (step) {
-            case 'google':
+            case 'google': {
                 if (person.google == null || person.google < 1) {
-                    let items = await doGoogle(person, true)
+                    let { items, useCache } = await doGoogle(person, true)
                     if (items.length == 0) throw new Error("empty google")
+                    person.googleResults = items.map(v => v.id)
                     person.google = 1
                     await personRepo.save(person)
-                    await _driver.driver.sleep(2000)
+                    if (useCache) await _driver.driver.sleep(2000)
                 }
                 break
+            }
             case 'google-result':
                 if (person.google == null || person.google < 1) {
                     logger.error(Person, '当前google为', person.google)
                 } else if (person.google == 1) {
                     let items = await pageRepo.find({
-                        where: {
-                            personId: person.id,
-                            html: { $exists: false, $eq: null }
-                        }
+                        where: { _id: { $in: person.googleResults }, srcType: { $ne: null } },
                     })
-                    await Promise.all(_.map(items, (async (item) => {
+                    let itemsMap = _.keyBy(items, v => v.id.toString())
+                    await Promise.all(_.map(person.googleResults, (async (pid) => {
+                        let item = itemsMap[pid.toString()]
+                        if (item == null) return
                         let parser = googleParsers[item.srcType]
                         if (parser != null) {
                             let r = await parser.parseItem(person, item)
-                            if (r._changed) await pageRepo.save(r)
+                            if (item._changed) await pageRepo.save(r)
                         }
                     })))
                 }
+                break
+            case 'reset-html': {
+                let items = await pageRepo.find({
+                    where: {
+                        personId: person.id,
+                        html: { $exists: true, $ne: null }
+                    }
+                })
+                await Promise.all(_.map(items, (async (item: PageResult) => {
+                    return await pageRepo.resetHtml(item.id)
+                })))
+                break
+            }
+            case 'gct': {
+                if (person.gct == null) {
+                    let useCache = await GctAminer.search(person)
+                    // if (items.length == 0) throw new Error("empty google")
+                    // person.googleResults = items.map(v => v.id)
+                    // person.google = 1
+                    // await personRepo.save(person)
+                    if (useCache) await _driver.driver.sleep(2000)
+                }
+                break
+            }
+            default:
+                if (stepFun != null) await stepFun(row, person)
+                break
         }
     }
+    if (endFun != null) await endFun()
 }
 
 main()
