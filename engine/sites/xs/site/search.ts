@@ -3,16 +3,23 @@ import { DriverFirefoxWing } from "./selenium-wing";
 import path = require('path');
 import log4js = require('log4js');
 import crypto = require('crypto');
+
+const { argv } = require('yargs')
+
 import "reflect-metadata"
 import Redis from "../../../core/redis";
 import { MainConfig } from "../../../core/config";
 import { Redis as iRedis } from "ioredis";
 import { load as cLoad } from "cheerio";
-import { checkSrcType, initDB, pageRepo, PageResult, Person, personRepo } from "../mod";
+import { checkSrcType, initDB, pageRepo, PageResult, Person, personRepo, personRepoExt } from "../mod";
 import _ = require("lodash");
 import XLSX = require('xlsx');
 import { GoogleResultParserCAS } from "./s_cas";
 import GctAminer from "./s_gctaminercn";
+
+// const yargs = require('yargs/yargs')
+// const { hideBin } = require('yargs/helpers')
+// const argv = yargs(hideBin(process.argv)).argv
 
 const logger = log4js.getLogger();
 logger.level = 'debug';
@@ -23,8 +30,13 @@ config.redis = { host: 'wsl.local', port: 6379 }
 MainConfig.default(config)
 const redis = Redis.inst() as iRedis
 
+let googleParsers = {
+    [GoogleResultParserCAS.Type]: new GoogleResultParserCAS()
+}
+
 async function getDriver() {
-    _driver = await DriverFirefoxWing.build()
+    if (_driver == null) _driver = await DriverFirefoxWing.build()
+    return _driver
 }
 
 // 通过谷歌搜索
@@ -79,8 +91,33 @@ async function doGoogle(person: Person, save = false) {
     return { items, useCache }
 }
 
+// 处理谷歌结果
+async function doGoogleResult(person: Person) {
+    let items = await pageRepo.find({
+        where: { _id: { $in: person.googleResults } },
+    })
+    let itemsMap = _.keyBy(items, v => v.id.toString())
+    for (let i = 0; i < person.googleResults.length; i++) {
+        let page = itemsMap[person.googleResults[i].toString()]
+        if (page != null) {
+            let parser = googleParsers[page.srcType]
+            let pageNew
+            if (parser != null) {
+                pageNew = await parser.parseItem(person, page)
+            }
+            if (page._changed && pageNew != null) await pageRepo.save(pageNew)
+        }
+    }
+}
+
 async function getPerson(op: Person) {
-    let person = await personRepo.findOne({ enName: op.enName, org: op.org })
+    let person: Person
+    // 先查exId
+    if (op.exId != null) {
+        person = await personRepo.findOne({ exId: op.exId })
+        if (person != null) return person
+    }
+    person = await personRepo.findOne({ enName: op.enName, org: op.org })
     if (person == null) {
         person = await personRepo.save(op)
     }
@@ -97,26 +134,31 @@ function saveRows(rows, headers, outPath) {
 
 
 async function main() {
+    /**
+     * 收集所有英文名的google搜索
+     */
+
     //@ts-ignore
     global.aawait = require('deasync-promise')
     await initDB()
-    await getDriver();
-    let book = XLSX.readFile("d:\\Weiyun\\手动同步\\wins\\xs\\华人名单-CAS-v2.xlsx");
-    let targetOrg = "Chinese Academy of Sciences"
+    let book = XLSX.readFile("d:\\Weiyun\\手动同步\\wins\\xs\\华人名单-单位合并.xlsx");
+    // let targetOrg = "Chinese Academy of Sciences"
     let sheet = book.Sheets[book.SheetNames[0]];
     let rows = XLSX.utils.sheet_to_json(sheet);
     let exportRows = []
-    // let step = 'google' //获取搜索结果
+    let step = 'google' //获取搜索结果
     // let step = 'google-result' //处理搜索结果
     // let step = 'reset-html'
-    // let step = 'gct'
-    let step = 'export-name' //导出名字
-    let googleParsers = {
-        [GoogleResultParserCAS.Type]: new GoogleResultParserCAS()
-    }
+    step = 'gct'
+    step = 'gct-detail'
+    // let step = 'export-name' //导出名字
+    if (_.size(argv.step) > 0) step = argv.step
     let endFun
     let stepFun: (row, person: Person) => Promise<void>
     switch (step) {
+        case 'google':
+            await getDriver();
+            break;
         case 'export-name': {
             stepFun = async (row, person: Person) => {
                 exportRows.push([person.id.toHexString(), person.cnName])
@@ -129,11 +171,18 @@ async function main() {
     }
     for (let i = 0; i < rows.length; i++) {
         let row = rows[i] as any
-        logger.info(`${i + 1}/${rows.length} ${row.Name}`)
+        logger.info(`${i + 1}/${rows.length} ${row.Name} ; ${row.Org}`)
         let person = new Person()
         person.enName = row.Name.trim()
-        person.org = targetOrg
-        person = await getPerson(person)
+        if(row.Org == null) continue
+        person.org = row.Org.trim()
+        person.exId = parseInt(row.id)
+        let person2 = await getPerson(person)
+        if (person2.exId == null) { //保存exId
+            await personRepo.updateOne({ _id: person2.id }, { $set: { exId: person.exId } })
+        }
+        person = person2
+
         switch (step) {
             case 'google': {
                 if (person.google == null || person.google < 1) {
@@ -147,9 +196,9 @@ async function main() {
                 break
             }
             case 'google-result':
-                if (person.google == null || person.google < 1) {
-                    logger.error(Person, '当前google为', person.google)
-                } else if (person.google == 1) {
+                if (person.google == 1) {
+                    await doGoogleResult(person)
+                    break
                     let items = await pageRepo.find({
                         where: { _id: { $in: person.googleResults }, srcType: { $ne: null } },
                     })
@@ -163,6 +212,8 @@ async function main() {
                             if (item._changed) await pageRepo.save(r)
                         }
                     })))
+                } else {
+                    logger.error(Person, '当前google为', person.google)
                 }
                 break
             case 'reset-html': {
@@ -179,13 +230,18 @@ async function main() {
             }
             case 'gct': {
                 if (person.gct == null) {
-                    let useCache = await GctAminer.search(person)
+                    // let useCache = await GctAminer.search(person)
+                    let useCache = await GctAminer.searchUI(person)
                     // if (items.length == 0) throw new Error("empty google")
                     // person.googleResults = items.map(v => v.id)
                     // person.google = 1
                     // await personRepo.save(person)
-                    if (useCache) await _driver.driver.sleep(2000)
+                    // if (useCache) await _driver.driver.sleep(2000)
                 }
+                break
+            }
+            case 'gct-detail':{
+                await GctAminer.fetchDetail(person)
                 break
             }
             default:

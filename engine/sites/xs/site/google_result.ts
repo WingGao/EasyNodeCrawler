@@ -15,12 +15,17 @@ export abstract class GoogleResultParser {
         let page: any = await Redis.setIfNull(cacheKey, async () => {
             useCache = false;
             logger.debug('fetchUrl', url, cacheKey)
-            let res = await axios.get(url, _.merge({
-                headers: {
-                    Accept: '*/*',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0'
-                }
-            }, conf))
+            let res
+            if(conf != null && conf.axios){
+                res = await conf.axios()
+            }else {
+                res = await axios.get(url, _.merge({
+                    headers: {
+                        Accept: '*/*',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:80.0) Gecko/20100101 Firefox/80.0'
+                    }
+                }, conf))
+            }
             return res.data
         })
         return { page, useCache }

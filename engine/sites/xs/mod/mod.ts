@@ -10,6 +10,9 @@ export class Person {
     id: ObjectID;
 
     @Column()
+    exId: number; //excel中的id
+
+    @Column()
     cnName: string
 
     @Column()
@@ -30,7 +33,10 @@ export class Person {
     @Column()
     gct: number // https://gct.aminer.cn/
     @Column()
-    gctInfo: string
+    gctInfo: string //gtc的搜索json
+    @Column()
+    gtcDetail: any //gtc爬取的详细信息
+
     toString() {
         return `Person{id=${this.id},cnName=${this.cnName},enName=${this.enName},org=${this.org}}`
     }
@@ -73,6 +79,7 @@ export const SrcType = {
     BaiduWiki: 'baidu-wiki',
     GoogleScholar: 'google-scholar',
     Ucas: 'ucas', // http://people.ucas.ac.cn
+    EduCn: 'edu-cn'
 }
 
 
@@ -108,14 +115,21 @@ function extendPageResult() {
 }
 
 export function checkSrcType(url: string) {
-    let u = new URL(url)
-    switch (u.host) {
-        case "en.wikipedia.org":
-            return SrcType.WikiEn
-        case "scholar.google.com":
-            return SrcType.GoogleScholar
-        case "people.ucas.ac.cn":
-            return SrcType.Ucas
+    try {
+        let u = new URL(url)
+        switch (u.host) {
+            case "en.wikipedia.org":
+                return SrcType.WikiEn
+            case "scholar.google.com":
+                return SrcType.GoogleScholar
+            case "people.ucas.ac.cn":
+                return SrcType.Ucas
+        }
+        if (u.host.endsWith('.edu.cn')) {
+            return SrcType.EduCn
+        }
+    } catch (e) {
+        console.error(e)
     }
     return undefined
 }
