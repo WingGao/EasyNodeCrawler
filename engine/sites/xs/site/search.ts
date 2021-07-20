@@ -150,7 +150,7 @@ async function main() {
     // let step = 'google-result' //处理搜索结果
     // let step = 'reset-html'
     step = 'gct'
-    step = 'gct-detail'
+    // step = 'gct-detail'
     // let step = 'export-name' //导出名字
     if (_.size(argv.step) > 0) step = argv.step
     let endFun
@@ -229,7 +229,7 @@ async function main() {
                 break
             }
             case 'gct': {
-                if (person.gct == null) {
+                if (person.gct != 1) {
                     // let useCache = await GctAminer.search(person)
                     let useCache = await GctAminer.searchUI(person)
                     // if (items.length == 0) throw new Error("empty google")
