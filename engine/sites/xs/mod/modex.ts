@@ -3,12 +3,13 @@ import { URL } from 'url';
 import { createConnection, Connection } from 'typeorm';
 import Redis from "../../../core/redis";
 import { ObjectID } from "mongodb";
-import { PageResult, Person, SrcType } from "./mod";
+import { Org, PageResult, Person, SrcType } from "./mod";
 
 
 let connection: Connection
 export let pageRepo: MongoRepository<PageResult> & IPageRepoExt
 export let personRepo: MongoRepository<Person>
+export let orgRepo: MongoRepository<Org>
 
 interface IPageRepoExt {
     upsertByUrl(p: PageResult): Promise<ObjectID>
@@ -104,5 +105,6 @@ export async function initDB() {
     pageRepo = getMongoRepository(PageResult) as any
     extendPageResult()
     personRepo = getMongoRepository(Person)
+    orgRepo = getMongoRepository(Org)
     return getManager();
 }

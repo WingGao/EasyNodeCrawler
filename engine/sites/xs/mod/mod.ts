@@ -19,6 +19,9 @@ export class Person {
     org: string
 
     @Column()
+    orgCn: string
+
+    @Column()
     google: number // 1=谷歌搜索完毕
 
     @Column()
@@ -74,3 +77,12 @@ export const SrcType = {
     EduCn: 'edu-cn'
 }
 
+@Entity()
+export class Org {
+    @ObjectIdColumn()
+    id: ObjectID;
+    @Column()
+    cn: string
+    @Column()
+    names: Array<string>
+}
