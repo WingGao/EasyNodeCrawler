@@ -3,13 +3,16 @@ import { URL } from 'url';
 import { createConnection, Connection } from 'typeorm';
 import Redis from "../../../core/redis";
 import { ObjectID } from "mongodb";
-import { Org, PageResult, Person, SrcType } from "./mod";
+import { Org, PageResult, Person, ProcessStep, Publish, SrcType } from "./mod";
+import _ = require('lodash')
 
 
 let connection: Connection
 export let pageRepo: MongoRepository<PageResult> & IPageRepoExt
 export let personRepo: MongoRepository<Person>
 export let orgRepo: MongoRepository<Org>
+export let publishRepo: MongoRepository<Publish>
+export let processRepo: MongoRepository<ProcessStep>
 
 interface IPageRepoExt {
     upsertByUrl(p: PageResult): Promise<ObjectID>
@@ -17,6 +20,8 @@ interface IPageRepoExt {
     resetHtml(id: string | ObjectID): Promise<Boolean>
 
     getCacheKey(p: PageResult): string | null
+
+    findByUrl(url: string): Promise<PageResult | null>
 }
 
 function extendPageResult() {
@@ -41,6 +46,10 @@ function extendPageResult() {
     pageRepo.getCacheKey = (pr: PageResult) => {
         if (this.url == null) return null
         return Redis.buildKeyMd5('node_xs:cache:', this.url)
+    }
+    pageRepo.findByUrl = async (url: string) => {
+        let res = await pageRepo.findOne({url})
+        return res
     }
 }
 
@@ -79,6 +88,26 @@ export const personRepoExt = {
     }
 }
 
+export const publishRepoExt = {
+    async checkDoi(doi: string) {
+        let res = await publishRepo.findOne({ select: ['id'], where: { doi } })
+        return res?.id
+    }
+}
+
+export const processRepoExt = {
+    async checkStep(key: string) {
+        let res = await processRepo.findOne({ select: ['id'], where: { tag: key } })
+        return res?.id
+    },
+
+    async mark(o: Partial<ProcessStep>) {
+        o = _.merge(new ProcessStep(), o)
+        let res = await processRepo.save(o)
+        return res.id
+    }
+}
+
 
 export class PageParsedInfo {
     pInfo: string // 个人简介
@@ -106,5 +135,18 @@ export async function initDB() {
     extendPageResult()
     personRepo = getMongoRepository(Person)
     orgRepo = getMongoRepository(Org)
+    publishRepo = getMongoRepository(Publish)
+    processRepo = getMongoRepository(ProcessStep)
     return getManager();
+}
+
+export async function doWithProcessStep(step: ProcessStep, action: () => Promise<any>) {
+    // 判断step
+    if (await processRepoExt.checkStep(step.tag) != null) {
+        return true //已处理
+    }
+    await action()
+    // 标记完成
+    await processRepoExt.mark(step)
+    return true
 }

@@ -5,17 +5,17 @@ import log4js = require('log4js');
 import crypto = require('crypto');
 
 const { argv } = require('yargs')
-
 import "reflect-metadata"
 import Redis from "../../../core/redis";
 import { MainConfig } from "../../../core/config";
 import { Redis as iRedis } from "ioredis";
 import { load as cLoad } from "cheerio";
-import { checkSrcType, initDB, pageRepo, PageResult, Person, personRepo, personRepoExt } from "../mod";
+import { checkSrcType, GTC_TYPE, initDB, pageRepo, PageResult, Person, personRepo, personRepoExt } from "../mod";
 import _ = require("lodash");
 import XLSX = require('xlsx');
 import { GoogleResultParserCAS } from "./s_cas";
 import GctAminer from "./s_gctaminercn";
+import TianyanCha from "./s_tianyancha";
 
 // const yargs = require('yargs/yargs')
 // const { hideBin } = require('yargs/helpers')
@@ -146,16 +146,23 @@ async function main() {
     let sheet = book.Sheets[book.SheetNames[0]];
     let rows = XLSX.utils.sheet_to_json(sheet);
     let exportRows = []
+    let exportRows2 = []
     let step = 'google' //获取搜索结果
     // let step = 'google-result' //处理搜索结果
     // let step = 'reset-html'
-    step = 'gct'
+    // step = 'gct'
     // step = 'gct-detail'
+    // step = 'gct-publish'
+    // step = 'gct-edu'
+    // step = 'gct-edu-export'
+    step = 'tyc-search'
+    // step = 'tyc-export'
     // let step = 'export-name' //导出名字
     if (_.size(argv.step) > 0) step = argv.step
     let endFun
     let stepFun: (row, person: Person) => Promise<void>
-    switch (step) {
+    let tianyan = new TianyanCha()
+    switch (step) { // 前置操作
         case 'google':
             await getDriver();
             break;
@@ -168,13 +175,51 @@ async function main() {
             }
             break
         }
+        case 'gct-edu-export': {
+            stepFun = async (row, person: Person) => {
+                _.forEach(person.gctEx?.eduList, v => {
+                    exportRows.push([person.cnName, v])
+                })
+                _.forEach(person.gctEx?.workList, v => {
+                    exportRows2.push([person.cnName, v])
+                })
+            }
+            endFun = async () => {
+                exportRows.splice(0, 0, ['cnName', 'edu']);
+                let book = XLSX.utils.book_new();
+                let sheet = XLSX.utils.aoa_to_sheet(exportRows);
+                XLSX.utils.book_append_sheet(book, sheet);
+                exportRows2.splice(0, 0, ['cnName', 'work']);
+                sheet = XLSX.utils.aoa_to_sheet(exportRows2);
+                XLSX.utils.book_append_sheet(book, sheet);
+                XLSX.writeFile(book, path.resolve(__dirname, '../temp/edu_work.xlsx'));
+            }
+            break
+        }
+        case 'tyc-export': {
+            let exportConfig = tianyan.exportToExcel()
+            stepFun = async (row, person: Person) => {
+                let rows = await exportConfig.onRow(person)
+                if (rows != null) rows.forEach(er => {
+                    exportRows.push(er)
+                })
+            }
+            endFun = async () => {
+                exportRows.splice(0, 0, exportConfig.headers);
+                let book = XLSX.utils.book_new();
+                let sheet = XLSX.utils.aoa_to_sheet(exportRows);
+                XLSX.utils.book_append_sheet(book, sheet);
+                XLSX.writeFile(book, path.resolve(__dirname, '../temp/tianyan.xlsx'));
+            }
+            break
+        }
     }
     for (let i = 0; i < rows.length; i++) {
         let row = rows[i] as any
         logger.info(`${i + 1}/${rows.length} ${row.Name} ; ${row.Org}`)
         let person = new Person()
         person.enName = row.Name.trim()
-        if(row.Org == null) continue
+        if (row.Org == null) continue
         person.org = row.Org.trim()
         person.exId = parseInt(row.id)
         let person2 = await getPerson(person)
@@ -182,7 +227,7 @@ async function main() {
             await personRepo.updateOne({ _id: person2.id }, { $set: { exId: person.exId } })
         }
         person = person2
-
+        logger.info(`${person.enName}(${person.cnName}) : ${person.org}(${person.orgCn})`)
         switch (step) {
             case 'google': {
                 if (person.google == null || person.google < 1) {
@@ -229,7 +274,7 @@ async function main() {
                 break
             }
             case 'gct': {
-                if (person.gct != 1) {
+                if (person.gct != GTC_TYPE.MATCHED && person.gct != GTC_TYPE.NO_RESULT) {
                     // let useCache = await GctAminer.search(person)
                     let useCache = await GctAminer.searchUI(person)
                     // if (items.length == 0) throw new Error("empty google")
@@ -240,8 +285,20 @@ async function main() {
                 }
                 break
             }
-            case 'gct-detail':{
+            case 'gct-detail': {
                 await GctAminer.fetchDetail(person)
+                break
+            }
+            case 'gct-publish': {
+                await GctAminer.fetchPublish(person)
+                break
+            }
+            case 'gct-edu': {
+                await GctAminer.parseEdu(person)
+                break
+            }
+            case 'tyc-search': {
+                await tianyan.searchUI(person)
                 break
             }
             default:
@@ -250,6 +307,12 @@ async function main() {
         }
     }
     if (endFun != null) await endFun()
+    logger.info('MainDone')
 }
+
+function gctEduExport() {
+
+}
+
 
 main()
